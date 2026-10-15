@@ -14,6 +14,7 @@ import 'line_map.dart';
 import 'live_watch_card.dart';
 import 'quando_avviso.dart';
 import 'riassunto.dart';
+import 'stop_screen.dart';
 import 'theme.dart';
 
 /// Il dettaglio di una linea: cosa succede, dove, e cosa fare.
@@ -319,6 +320,15 @@ class _LineScreenState extends State<LineScreen> {
                   widget.repo.isSaved(_salvata(stop, shape)),
               onToggleSave: (stop, shape) => _salva(stop, shape),
               onOpenFullScreen: _apriMappa,
+              onOpenArrivals: (stop) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        StopScreen(stop: stop, repo: widget.repo),
+                  ),
+                );
+              },
             ),
 
             if (attivi.isNotEmpty) ...[

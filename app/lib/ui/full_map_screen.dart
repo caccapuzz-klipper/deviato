@@ -12,6 +12,7 @@ import 'cartina.dart';
 import 'line_badge.dart';
 import 'line_map.dart';
 import 'scheda_mappa.dart';
+import 'stop_screen.dart';
 
 /// La mappa a tutto schermo, con una scheda che galleggia in basso.
 ///
@@ -138,6 +139,14 @@ class _FullMapScreenState extends State<FullMapScreen> {
                   onToggleWatch: osservando
                       ? repo.stopWatch
                       : () => repo.startWatch(widget.line),
+                  onOpenArrivals: (stop) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => StopScreen(stop: stop, repo: repo),
+                      ),
+                    );
+                  },
                   // La scheda sta dentro la mappa, che le passa i suoi
                   // comandi: cosi' non galleggiano piu' sulla cartina.
                   scheda: (context, comandi) => Positioned(
@@ -218,6 +227,14 @@ class _FullMapScreenState extends State<FullMapScreen> {
       onToggleSave: shape == null || salvaData == null
           ? null
           : () => salvaData(f.stop, shape!),
+      onOpenArrivals: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => StopScreen(stop: f.stop, repo: widget.repo),
+          ),
+        );
+      },
       onClose: () => _scelta.value = null,
     );
   }

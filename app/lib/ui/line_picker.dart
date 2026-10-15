@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../core/deviation_service.dart';
+import '../core/models/saved_stop.dart';
 import '../core/models/transit.dart';
 import '../core/pipeline/line_search.dart';
 import '../core/pipeline/stop_search.dart';
 import '../core/text/display_names.dart';
-import '../core/models/saved_stop.dart';
 import '../data/app_repository.dart';
 import 'line_badge.dart';
+import 'line_screen.dart';
 import 'stop_screen.dart';
 import 'theme.dart';
 
@@ -57,8 +59,53 @@ class _LinePickerState extends State<LinePicker> {
   void _cambiata(String testo) {
     // Le fermate si scaricano alla prima lettera, non all'apertura: chi
     // aggiunge una linea dall'elenco non ne ha bisogno.
-    if (testo.trim().isNotEmpty) widget.repo.caricaFermate();
+    if (testo.trim().isNotEmpty) {
+      widget.repo.caricaFermate();
+      final trovate = LineSearch.filter(widget.repo.allLines, testo);
+      for (final l in trovate.take(5)) {
+        if (widget.repo.statusOf(l.routeId) == null) {
+          widget.repo.loadLine(l);
+        }
+      }
+    }
     setState(() {});
+  }
+
+  Future<void> _apriMappaLinea(TransitLine line) async {
+    LineStatus? status = widget.repo.statusOf(line.routeId);
+    if (status == null) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('Caricamento percorso…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      status = await widget.repo.loadLine(line);
+      if (mounted) Navigator.pop(context);
+    }
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => LineScreen(
+          repo: widget.repo,
+          line: line,
+        ),
+      ),
+    );
   }
 
   Future<void> _salva(FermataCercabile f, String routeId, int dir) async {
@@ -79,13 +126,24 @@ class _LinePickerState extends State<LinePicker> {
   }
 
   void _add(TransitLine line) {
-    // Il messaggio si prende prima di chiudere il foglio: dopo, questo
-    // contesto non c'e' piu'.
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.pop(context);
     widget.repo.addLine(line);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Linea ${line.shortName} aggiunta')),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Linea ${line.shortName} aggiunta alle linee di maggior interesse',
+        ),
+      ),
+    );
+  }
+
+  void _remove(TransitLine line) {
+    widget.repo.removeLine(line);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Linea ${line.shortName} rimossa dalle linee di maggior interesse',
+        ),
+      ),
     );
   }
 
@@ -439,6 +497,11 @@ class _LinePickerState extends State<LinePicker> {
   Widget _riga(TransitLine line, bool aggiunta) {
     final parti = DisplayNames.routeParts(line.longName ?? '');
     final scheme = Theme.of(context).colorScheme;
+    final colori = StatusColors.of(context);
+    final status = widget.repo.statusOf(line.routeId);
+    final isDeviata = status != null && status.activeReports.isNotEmpty;
+    final isRegolare = status != null && status.activeReports.isEmpty;
+
     return ListTile(
       leading: SizedBox(
         width: 60,
@@ -448,19 +511,84 @@ class _LinePickerState extends State<LinePicker> {
         ),
       ),
       title: Text(parti.route, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: parti.qualifier == null
-          ? null
-          : Text(
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (parti.qualifier != null)
+            Text(
               parti.qualifier!,
               style: TextStyle(color: scheme.onSurfaceVariant),
             ),
-      trailing: aggiunta
-          ? Semantics(
-              label: 'Già fra le tue linee',
-              child: Icon(Icons.check, color: StatusColors.of(context).ok),
+          if (isDeviata)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: scheme.errorContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 14,
+                    color: scheme.onErrorContainer,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'ATTENZIONE: DEVIATA${status.allSkippedStops.isNotEmpty ? " (-${status.allSkippedStops.length} fermate)" : ""}',
+                    style: TextStyle(
+                      color: scheme.onErrorContainer,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             )
-          : Icon(Icons.add, color: scheme.primary),
-      onTap: aggiunta ? null : () => _add(line),
+          else if (isRegolare)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: colori.ok.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_outline, size: 14, color: colori.ok),
+                  const SizedBox(width: 4),
+                  Text(
+                    'REGOLARE',
+                    style: TextStyle(
+                      color: colori.ok,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Text(
+              'Tocca per vedere il percorso sulla mappa',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+        ],
+      ),
+      trailing: IconButton(
+        icon: Icon(
+          aggiunta ? Icons.star : Icons.star_border,
+          color: aggiunta ? Colors.amber[700] : scheme.onSurfaceVariant,
+        ),
+        tooltip: aggiunta
+            ? 'Rimuovi da maggior interesse'
+            : 'Aggiungi a maggior interesse',
+        onPressed: () => aggiunta ? _remove(line) : _add(line),
+      ),
+      onTap: () => _apriMappaLinea(line),
     );
   }
 }

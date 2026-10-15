@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/config.dart';
+import '../core/deviation_service.dart';
 import '../core/geo/projection.dart';
 import '../core/models/saved_stop.dart';
 import '../core/models/transit.dart';
 import '../core/sources/scioperi_mit.dart';
 import '../core/pipeline/arrivi_fermata.dart';
+import '../core/pipeline/line_search.dart';
+import '../core/pipeline/stop_answer.dart';
 import '../core/pipeline/stop_search.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
@@ -19,6 +22,7 @@ import 'line_tile.dart';
 import 'logo.dart';
 import 'saved_stop_card.dart';
 import 'stop_screen.dart';
+import 'theme.dart';
 
 /// La home: le fermate che usi, e sotto le linee.
 ///
@@ -27,15 +31,29 @@ import 'stop_screen.dart';
 /// e' servita? — mentre una linea dice solo quante ne salta. Le linee si
 /// aggiungono da qui, con «+», e si tolgono scorrendo: prima si passava
 /// dalle impostazioni, scrivendo il nome a memoria.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({required this.repo, super.key});
 
   final AppRepository repo;
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _sezione = 0; // 0: Di maggior interesse (orari rapidi), 1: Tutte le linee (mappe)
+  final _filtroLinee = TextEditingController();
+
+  @override
+  void dispose() {
+    _filtroLinee.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: repo,
+      listenable: widget.repo,
       builder: (context, _) {
         return Scaffold(
           appBar: AppBar(
@@ -47,9 +65,9 @@ class HomeScreen extends StatelessWidget {
                 onPressed: () => _mostraFermateVicine(context),
               ),
               IconButton(
-                icon: const Icon(Icons.add),
-                tooltip: 'Aggiungi una linea',
-                onPressed: () => showLinePicker(context, repo),
+                icon: const Icon(Icons.search),
+                tooltip: 'Cerca linea o fermata',
+                onPressed: () => showLinePicker(context, widget.repo),
               ),
               IconButton(
                 icon: const Icon(Icons.info_outline),
@@ -57,7 +75,7 @@ class HomeScreen extends StatelessWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (_) => InfoScreen(repo: repo),
+                    builder: (_) => InfoScreen(repo: widget.repo),
                   ),
                 ),
               ),
@@ -70,9 +88,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _body(BuildContext context) {
-    // `idle` significa che il caricamento non e' ancora partito. Con una
-    // watchlist da caricare va mostrato l'avanzamento: altrimenti nei
-    // primi istanti la schermata resta bianca senza spiegazioni.
+    final repo = widget.repo;
     if (repo.state == LoadState.loading ||
         (repo.state == LoadState.idle && repo.settings.watchlist.isNotEmpty)) {
       return const _Loading();
@@ -90,33 +106,11 @@ class HomeScreen extends StatelessWidget {
     }
 
     final lines = repo.lines;
-    if (lines.isEmpty) {
-      return _Message(
-        icon: Icons.directions_bus_outlined,
-        title: 'Aggiungi le tue linee',
-        detail:
-            'Cercale per numero o per via: vedrai subito se sono '
-            'deviate.',
-        action: FilledButton.icon(
-          onPressed: () => showLinePicker(context, repo),
-          icon: const Icon(Icons.add),
-          label: const Text('Aggiungi una linea'),
-        ),
-      );
-    }
-
     final byId = {for (final l in lines) l.routeId: l};
     final fermate = [
       for (final s in repo.savedStops)
         if (byId.containsKey(s.routeId)) s,
     ];
-    // Una scheda per linea, nell'ordine in cui le fermate sono state
-    // salvate: la linea della prima viene prima.
-    final perLinea = <String, List<Widget>>{};
-    for (var i = 0; i < fermate.length; i++) {
-      final riga = _fermata(context, fermate[i], byId[fermate[i].routeId]!, i);
-      if (riga != null) (perLinea[fermate[i].routeId] ??= []).add(riga);
-    }
 
     return RefreshIndicator(
       onRefresh: repo.refreshAll,
@@ -129,65 +123,784 @@ class HomeScreen extends StatelessWidget {
           if (repo.scioperoInArrivo case final sciopero?)
             _ScioperoBanner(sciopero: sciopero, repo: repo),
 
-          if (fermate.isNotEmpty) ...[
-            const _SectionTitle('Le tue fermate'),
-            for (final e in perLinea.entries)
-              SavedStopsGroup(
-                line: byId[e.key]!,
-                onOpenLine: repo.statusOf(e.key) == null
-                    ? () => repo.refreshLine(byId[e.key]!)
-                    : () => _apri(context, byId[e.key]!),
-                children: e.value,
-              ),
-          ] else if (!repo.settings.stopsHintSeen)
-            _StopsHint(onClose: repo.dismissStopsHint),
+          // Selettore sezioni cliccabile
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+            child: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment<int>(
+                  value: 0,
+                  icon: Icon(Icons.star, size: 18),
+                  label: Text('Di maggior interesse'),
+                ),
+                ButtonSegment<int>(
+                  value: 1,
+                  icon: Icon(Icons.map_outlined, size: 18),
+                  label: Text('Tutte le linee (Mappe)'),
+                ),
+              ],
+              selected: {_sezione},
+              onSelectionChanged: (val) => setState(() => _sezione = val.first),
+            ),
+          ),
 
-          _LinesHeader(
-            lastCheck: _ultimoControllo(lines),
-            refreshing: repo.isRefreshingAll,
-            failed: repo.offline,
-            onRefreshAll: repo.refreshAll,
-          ),
-          for (final line in lines) _linea(context, line),
-          ListTile(
-            leading: SizedBox(
-              width: 60,
-              child: Icon(
-                Icons.add,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            title: Text(
-              'Aggiungi una linea',
-              style: TextStyle(color: Theme.of(context).colorScheme.primary),
-            ),
-            onTap: () => showLinePicker(context, repo),
-          ),
+          if (_sezione == 0)
+            _sezioneMaggiorInteresse(context, fermate, lines, byId)
+          else
+            _sezioneTutteLeLinee(context),
         ],
       ),
     );
   }
+
+  Widget _sezioneMaggiorInteresse(
+    BuildContext context,
+    List<SavedStop> fermate,
+    List<TransitLine> lines,
+    Map<String, TransitLine> byId,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final testo = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Scheda in evidenza per inserimento rapido
+        Card(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          elevation: 0,
+          color: scheme.surfaceContainerHighest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.star, color: Colors.amber[700], size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Linee e fermate di maggior interesse',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      Text(
+                        'Orari rapidi immediati senza percorso · Controllo deviazioni',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () => showLinePicker(context, widget.repo),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Inserisci'),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        if (fermate.isEmpty && lines.isEmpty)
+          Card(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(Icons.star_outline, size: 48, color: scheme.primary),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Nessun elemento di maggior interesse',
+                    style: testo.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Inserisci le linee o fermate che prendi di solito per consultare '
+                    'subito gli orari di arrivo in tempo reale e sapere con attenzione '
+                    'se sono deviate o regolari.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => showLinePicker(context, widget.repo),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Inserisci linea o fermata'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Fermate di maggior interesse
+        if (fermate.isNotEmpty) ...[
+          const _SectionTitle('Fermate di maggior interesse (Orari immediati)'),
+          for (var i = 0; i < fermate.length; i++)
+            if (byId[fermate[i].routeId] case final l?)
+              _schedaFermataInteresse(context, fermate[i], l, i),
+        ],
+
+        // Linee di maggior interesse
+        if (lines.isNotEmpty) ...[
+          _LinesHeader(
+            lastCheck: _ultimoControllo(lines),
+            refreshing: widget.repo.isRefreshingAll,
+            failed: widget.repo.offline,
+            onRefreshAll: widget.repo.refreshAll,
+          ),
+          for (final line in lines)
+            _schedaLineaInteresse(context, line),
+        ],
+      ],
+    );
+  }
+
+  Widget _schedaFermataInteresse(
+    BuildContext context,
+    SavedStop s,
+    TransitLine line,
+    int posizione,
+  ) {
+    final risposta = widget.repo.answerFor(s);
+    if (risposta == null) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final colori = StatusColors.of(context);
+    final stop = risposta.stop ??
+        TransitStop(
+          id: s.stopId,
+          name: 'Fermata ${s.stopCode ?? s.stopId}',
+          code: s.stopCode,
+          position: const GeoPoint(45.07, 7.68),
+        );
+    final isDeviata = risposta.state == StopState.closed;
+    final isClosesLater = risposta.state == StopState.closesLater;
+    final isServita = risposta.state == StopState.served;
+
+    final verso = risposta.shape == null
+        ? null
+        : DisplayNames.direction(
+            risposta.shape!.headsign,
+            longName: line.longName,
+          );
+
+    return Dismissible(
+      key: ValueKey('fermata-fav-${s.routeId}-${s.stopId}-${s.directionId}'),
+      direction: DismissDirection.endToStart,
+      background: const _SwipeBackground(label: 'Rimuovi'),
+      onDismissed: (_) {
+        widget.repo.unsaveStop(s);
+        _conAnnulla(
+          context,
+          'Fermata rimossa dai preferiti',
+          () => widget.repo.restoreSavedStop(s, posizione),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        elevation: 0,
+        color: isDeviata
+            ? scheme.errorContainer.withValues(alpha: 0.35)
+            : scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: isDeviata
+              ? BorderSide(color: scheme.error, width: 1.5)
+              : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            // Apre gli orari immediatamente senza percorso!
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => StopScreen(stop: stop, repo: widget.repo),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LineBadge(line: line, height: 26),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: DisplayNames.stop(stop),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                if (stop.code != null)
+                                  TextSpan(
+                                    text: ' · Palina ${stop.code}',
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.normal,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (verso != null)
+                            Text(
+                              'verso $verso',
+                              style: TextStyle(
+                                color: scheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // ATTENZIONE: STATO DEVIAZIONE O REGOLARE
+                if (isDeviata)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 16,
+                              color: scheme.onErrorContainer,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'ATTENZIONE: FERMATA NON SERVITA (DEVIATA)',
+                                style: TextStyle(
+                                  color: scheme.onErrorContainer,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (risposta.until != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2, left: 22),
+                            child: Text(
+                              'Fino al ${_data(risposta.until!)}',
+                              style: TextStyle(
+                                color: scheme.onErrorContainer,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        if (risposta.walkTo.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, left: 22),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.directions_walk, size: 14),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Sali alla fermata ${DisplayNames.stop(risposta.walkTo.first.stop)} (${risposta.walkTo.first.stop.code ?? ""}) a circa ${risposta.walkTo.first.metri}m',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                else if (isClosesLater)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: colori.warning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.event_outlined, size: 16, color: colori.warning),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            risposta.from == null
+                                ? 'Servita, chiuderà a breve per deviazione'
+                                : 'Servita, chiuderà dal ${_data(risposta.from!)}',
+                            style: TextStyle(
+                              color: colori.warning,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (isServita)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: colori.ok.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline, size: 16, color: colori.ok),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'REGOLARE · Fermata regolarmente servita',
+                            style: TextStyle(
+                              color: colori.ok,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 8),
+                // Azioni: Orari immediati senza percorso o mappa
+                Row(
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => StopScreen(stop: stop, repo: widget.repo),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.departure_board, size: 16),
+                      label: const Text('Orari in tempo reale'),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.map_outlined, size: 20),
+                      tooltip: 'Vedi linea su mappa',
+                      onPressed: () => _apri(context, line, stopId: s.stopId),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _schedaLineaInteresse(BuildContext context, TransitLine line) {
+    final scheme = Theme.of(context).colorScheme;
+    final colori = StatusColors.of(context);
+    final status = widget.repo.statusOf(line.routeId);
+    final parti = DisplayNames.routeParts(line.longName ?? '');
+    final isDeviata = status != null && status.activeReports.isNotEmpty;
+    final isRegolare = status != null && status.activeReports.isEmpty;
+    final skippedStops = status?.allSkippedStops ?? const [];
+
+    return Dismissible(
+      key: ValueKey('linea-fav-${line.routeId}'),
+      direction: DismissDirection.endToStart,
+      background: const _SwipeBackground(label: 'Rimuovi'),
+      onDismissed: (_) async {
+        final messenger = ScaffoldMessenger.of(context);
+        final lettore = MediaQuery.accessibleNavigationOf(context);
+        final tolta = await widget.repo.removeLine(line);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            _annullabile(
+              'Linea ${line.shortName} rimossa dai preferiti',
+              () => widget.repo.restoreLine(tolta),
+              lettore: lettore,
+            ),
+          );
+      },
+      child: Card(
+        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        elevation: 0,
+        color: isDeviata
+            ? scheme.errorContainer.withValues(alpha: 0.35)
+            : scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: isDeviata
+              ? BorderSide(color: scheme.error, width: 1.5)
+              : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  LineBadge(line: line, height: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          parti.route,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (parti.qualifier != null)
+                          Text(
+                            parti.qualifier!,
+                            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // ATTENZIONE: DEVIATA O REGOLARE
+              if (isDeviata)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: scheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 16, color: scheme.onErrorContainer),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'ATTENZIONE: LINEA DEVIATA${skippedStops.isNotEmpty ? " (salta ${skippedStops.length} fermate)" : ""}',
+                              style: TextStyle(
+                                color: scheme.onErrorContainer,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (status.activeReports.isNotEmpty &&
+                          status.activeReports.first.notice.title.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2, left: 22),
+                          child: Text(
+                            status.activeReports.first.notice.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: scheme.onErrorContainer, fontSize: 12),
+                          ),
+                        ),
+                      if (skippedStops.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 22),
+                          child: Text(
+                            'Fermate saltate: ${skippedStops.take(4).map((s) => s.stop.name).join(", ")}${skippedStops.length > 4 ? "…" : ""}',
+                            style: TextStyle(
+                              color: scheme.onErrorContainer,
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                )
+              else if (isRegolare)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: colori.ok.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 16, color: colori.ok),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'REGOLARE · Percorso regolare',
+                          style: TextStyle(
+                            color: colori.ok,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 10),
+              // DUE AZIONI: ORARI IMMEDIATI SENZA PERCORSO e PERCORSO SU MAPPA
+              Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => _mostraOrariFermateLinea(context, line, status),
+                    icon: const Icon(Icons.departure_board, size: 16),
+                    label: const Text('Orari fermate'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _apri(context, line),
+                    icon: const Icon(Icons.map_outlined, size: 16),
+                    label: const Text('Percorso mappa'),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sezioneTutteLeLinee(BuildContext context) {
+    final repo = widget.repo;
+    final scheme = Theme.of(context).colorScheme;
+    final colori = StatusColors.of(context);
+    final testo = Theme.of(context).textTheme;
+
+    if (repo.allLines.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const LinearProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('Caricamento elenco linee…', style: testo.bodyMedium),
+          ],
+        ),
+      );
+    }
+
+    final query = _filtroLinee.text.trim();
+    final filtrate = query.isEmpty
+        ? repo.allLines
+        : LineSearch.filter(repo.allLines, query);
+    final giaSalvate = {for (final l in repo.lines) l.routeId};
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: TextField(
+            controller: _filtroLinee,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Cerca linea per numero o via…',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(_filtroLinee.clear),
+                    ),
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        if (filtrate.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Nessuna linea trovata per «$query»',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          )
+        else
+          for (final l in filtrate) ...[
+            Builder(
+              builder: (context) {
+                final parti = DisplayNames.routeParts(l.longName ?? '');
+                final status = repo.statusOf(l.routeId);
+                final isDeviata = status != null && status.activeReports.isNotEmpty;
+                final isRegolare = status != null && status.activeReports.isEmpty;
+                final inFav = giaSalvate.contains(l.routeId);
+
+                return ListTile(
+                  leading: SizedBox(
+                    width: 60,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: LineBadge(line: l, height: 32),
+                    ),
+                  ),
+                  title: Text(parti.route, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Row(
+                    children: [
+                      if (isDeviata)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: scheme.errorContainer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '⚠️ DEVIATA',
+                            style: TextStyle(
+                              color: scheme.onErrorContainer,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        )
+                      else if (isRegolare)
+                        Text(
+                          '🟢 Percorso regolare',
+                          style: TextStyle(color: colori.ok, fontSize: 12),
+                        )
+                      else
+                        Text(
+                          'Tocca per mappa percorso',
+                          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                        ),
+                    ],
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(
+                      inFav ? Icons.star : Icons.star_border,
+                      color: inFav ? Colors.amber[700] : scheme.onSurfaceVariant,
+                    ),
+                    tooltip: inFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti',
+                    onPressed: () {
+                      if (inFav) {
+                        repo.removeLine(l);
+                      } else {
+                        repo.addLine(l);
+                      }
+                    },
+                  ),
+                  onTap: () => _apri(context, l),
+                );
+              },
+            ),
+            const Divider(height: 1, indent: 72),
+          ],
+      ],
+    );
+  }
+
+  Future<void> _mostraOrariFermateLinea(
+    BuildContext context,
+    TransitLine line,
+    LineStatus? status,
+  ) async {
+    LineStatus? effettivo = status ?? widget.repo.statusOf(line.routeId);
+    if (effettivo == null) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('Caricamento fermate…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      effettivo = await widget.repo.loadLine(line);
+      if (mounted) Navigator.pop(context);
+    }
+    if (effettivo == null || !mounted) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: _OrariFermateLineaSheet(
+          line: line,
+          status: effettivo!,
+          repo: widget.repo,
+        ),
+      ),
+    );
+  }
+
+  static String _data(DateTime t) =>
+      '${t.day.toString().padLeft(2, "0")}/${t.month.toString().padLeft(2, "0")}';
 
   /// Il controllo piu' recente fra le linee: quello che dice quanto e'
   /// fresca la lista. Le righe vecchie dicono da sole di quando sono.
   DateTime? _ultimoControllo(List<TransitLine> lines) {
     DateTime? ultimo;
     for (final l in lines) {
-      final t = repo.checkedAt(l.routeId);
+      final t = widget.repo.checkedAt(l.routeId);
       if (t != null && (ultimo == null || t.isAfter(ultimo))) ultimo = t;
     }
     return ultimo;
   }
 
   void _apri(BuildContext context, TransitLine line, {String? stopId}) {
-    // Un «Annulla» della home non ha senso nel dettaglio: seguirebbe
-    // l'utente in un'altra schermata, sopra la mappa.
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (_) =>
-            LineScreen(repo: repo, line: line, initialStopId: stopId),
+            LineScreen(repo: widget.repo, line: line, initialStopId: stopId),
       ),
     );
   }
@@ -200,108 +913,8 @@ class HomeScreen extends StatelessWidget {
       showDragHandle: true,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.85,
-        child: _FermateVicineSheet(repo: repo),
+        child: _FermateVicineSheet(repo: widget.repo),
       ),
-    );
-  }
-
-  Widget? _fermata(
-    BuildContext context,
-    SavedStop s,
-    TransitLine line,
-    int posizione,
-  ) {
-    final risposta = repo.answerFor(s);
-    if (risposta == null) return null;
-    return Dismissible(
-      key: ValueKey('fermata-$s'),
-      direction: DismissDirection.endToStart,
-      background: const _SwipeBackground(label: 'Rimuovi'),
-      onDismissed: (_) {
-        repo.unsaveStop(s);
-        _conAnnulla(
-          context,
-          'Fermata rimossa',
-          () => repo.restoreSavedStop(s, posizione),
-        );
-      },
-      child: SavedStopRow(
-        answer: risposta,
-        line: line,
-        checking: repo.isChecking(line.routeId),
-        // Mai controllata: toccarla la controlla, come una riga della
-        // lista. Altrimenti apre la linea, con la fermata gia' scelta.
-        onTap: repo.statusOf(line.routeId) == null
-            ? () => repo.refreshLine(line)
-            : () => _apri(context, line, stopId: s.stopId),
-        onOpenArrivals: () {
-          final stop = risposta.stop ??
-              TransitStop(
-                id: s.stopId,
-                name: 'Fermata ${s.stopCode ?? s.stopId}',
-                code: s.stopCode,
-                position: const GeoPoint(45.07, 7.68),
-              );
-          Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => StopScreen(stop: stop, repo: repo),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _linea(BuildContext context, TransitLine line) {
-    final preparing = repo.isPreparing(line.routeId);
-    final checking = repo.isChecking(line.routeId);
-    final tile = LineTile(
-      line: line,
-      status: repo.statusOf(line.routeId),
-      checking: checking,
-      preparing: preparing,
-      watching: repo.isWatching(line.routeId),
-      watchedVehicles: repo.liveTracks.length,
-      checkedAt: repo.checkedAt(line.routeId),
-      // Una riga mai controllata non ha niente da aprire: toccarla la
-      // controlla. Prima non succedeva nulla, e una riga che sembra
-      // toccabile e non risponde sembra rotta.
-      onTap: preparing
-          ? null
-          : repo.statusOf(line.routeId) == null
-          ? () => repo.refreshLine(line)
-          : () => _apri(context, line),
-    );
-    // Non si toglie una linea mentre la si prepara o la si controlla: il
-    // controllo finirebbe su una riga che non c'e' piu'.
-    if (preparing || checking) return tile;
-    return Dismissible(
-      key: ValueKey('linea-${line.routeId}'),
-      direction: DismissDirection.endToStart,
-      background: const _SwipeBackground(label: 'Rimuovi'),
-      onDismissed: (_) async {
-        final messenger = ScaffoldMessenger.of(context);
-        final lettore = MediaQuery.accessibleNavigationOf(context);
-        final tolta = await repo.removeLine(line);
-        final fermate = tolta.savedStops.length;
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            _annullabile(
-              switch (fermate) {
-                0 => 'Linea ${line.shortName} rimossa',
-                1 => 'Linea ${line.shortName} rimossa con la sua fermata',
-                _ =>
-                  'Linea ${line.shortName} rimossa con le sue $fermate '
-                      'fermate',
-              },
-              () => repo.restoreLine(tolta),
-              lettore: lettore,
-            ),
-          );
-      },
-      child: tile,
     );
   }
 
@@ -321,12 +934,6 @@ class HomeScreen extends StatelessWidget {
       );
   }
 
-  /// Un avviso in basso con «Annulla».
-  ///
-  /// Flutter tiene fermo per sempre uno SnackBar che ha un pulsante, finché
-  /// qualcuno non lo chiude: «Fermata rimossa» restava lì sopra la home.
-  /// Sparisce dopo cinque secondi, tranne con VoiceOver o TalkBack
-  /// ([lettore]), dove raggiungere il pulsante richiede più tempo.
   static SnackBar _annullabile(
     String testo,
     VoidCallback annulla, {
@@ -337,6 +944,149 @@ class HomeScreen extends StatelessWidget {
     persist: lettore,
     action: SnackBarAction(label: 'Annulla', onPressed: annulla),
   );
+}
+
+class _OrariFermateLineaSheet extends StatefulWidget {
+  const _OrariFermateLineaSheet({
+    required this.line,
+    required this.status,
+    required this.repo,
+  });
+
+  final TransitLine line;
+  final LineStatus status;
+  final AppRepository repo;
+
+  @override
+  State<_OrariFermateLineaSheet> createState() => _OrariFermateLineaSheetState();
+}
+
+class _OrariFermateLineaSheetState extends State<_OrariFermateLineaSheet> {
+  int _dirIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final shapes = widget.status.allShapes.isNotEmpty
+        ? widget.status.allShapes
+        : [
+            widget.status.shape,
+            if (widget.status.shapeReturn != null) widget.status.shapeReturn!,
+          ];
+    final shapeCorrente =
+        shapes.isNotEmpty ? shapes[_dirIndex.clamp(0, shapes.length - 1)] : null;
+    final fermate = shapeCorrente?.stops ?? const <TransitStop>[];
+    final skippedIds = {
+      for (final s in widget.status.allSkippedStops) s.stop.id,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              LineBadge(line: widget.line, height: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Orari e fermate · Linea ${widget.line.shortName}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Tocca una fermata per gli orari in tempo reale',
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (shapes.length > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: SegmentedButton<int>(
+              segments: [
+                for (var i = 0; i < shapes.length; i++)
+                  ButtonSegment<int>(
+                    value: i,
+                    label: Text(
+                      'verso ${DisplayNames.direction(shapes[i].headsign, longName: widget.line.longName)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              selected: {_dirIndex},
+              onSelectionChanged: (val) => setState(() => _dirIndex = val.first),
+            ),
+          ),
+        const Divider(height: 1),
+        Expanded(
+          child: fermate.isEmpty
+              ? const Center(child: Text('Nessuna fermata registrata'))
+              : ListView.separated(
+                  itemCount: fermate.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
+                  itemBuilder: (context, i) {
+                    final f = fermate[i];
+                    final isSkipped = skippedIds.contains(f.id);
+
+                    return ListTile(
+                      leading: Icon(
+                        isSkipped
+                            ? Icons.do_not_disturb_on_outlined
+                            : Icons.signpost_outlined,
+                        color: isSkipped ? scheme.error : scheme.primary,
+                      ),
+                      title: Text(
+                        DisplayNames.stop(f),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isSkipped ? scheme.error : null,
+                          decoration: isSkipped ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (f.code != null)
+                            Text('Palina ${f.code}'),
+                          if (isSkipped)
+                            Text(
+                              '⚠️ Fermata saltata per deviazione attiva',
+                              style: TextStyle(
+                                color: scheme.error,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                      trailing: const Icon(Icons.departure_board_outlined),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => StopScreen(stop: f, repo: widget.repo),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
 }
 
 class _SectionTitle extends StatelessWidget {

@@ -51,6 +51,7 @@ class LineMap extends StatefulWidget {
     this.watching = false,
     this.watchCount = 0,
     this.scheda,
+    this.onOpenArrivals,
   });
 
   final LineStatus status;
@@ -112,6 +113,7 @@ class LineMap extends StatefulWidget {
   /// la mappa mostra solo il nome.
   final bool Function(TransitStop stop, RouteShape shape)? isSaved;
   final void Function(TransitStop stop, RouteShape shape)? onToggleSave;
+  final void Function(TransitStop stop)? onOpenArrivals;
 
   @override
   State<LineMap> createState() => _LineMapState();
@@ -424,11 +426,10 @@ class _LineMapState extends State<LineMap> {
         ? const <LatLng>[]
         : [for (final p in widget.observed!.path) LatLng(p.lat, p.lon)];
 
-    final bounds = LatLngBounds.fromPoints(
-      deviations.isNotEmpty
-          ? deviations.expand((d) => d).toList()
-          : [for (final i in mostrate) ...directions[i].points],
-    );
+    final bounds = LatLngBounds.fromPoints([
+      for (final i in mostrate) ...directions[i].points,
+      if (deviations.isNotEmpty) ...deviations.expand((d) => d),
+    ]);
     _routeBounds = bounds;
 
     final mappa = Stack(
@@ -630,6 +631,9 @@ class _LineMapState extends State<LineMap> {
                   ),
             saved: _savedState(_selected!.stop),
             onToggleSave: _saveAction(_selected!.stop),
+            onOpenArrivals: widget.onOpenArrivals == null
+                ? null
+                : () => widget.onOpenArrivals!(_selected!.stop),
             onClose: () => setState(() => _selected = null),
           )
         else
@@ -675,50 +679,82 @@ class _LineMapState extends State<LineMap> {
   }) {
     final cartina = Cartina.of(context);
     final isSkipped = impact != null;
-    // Servite a 17: a 11, com'erano, dentro non ci stava una freccia.
-    final dot = isSkipped ? 20.0 : (selected ? 22.0 : 17.0);
+    final palinaColor = isSkipped
+        ? cartina.chiusa
+        : (direzione == null
+            ? const Color(0xFF1976D2)
+            : cartina.direzione(direzione));
 
-    // Il pallino visibile e' piccolo, ma il Marker di flutter_map usa le
-    // proprie dimensioni ANCHE come area sensibile al tocco: con 11 px non
-    // si prende mai. Il marcatore e' quindi grande [_tapTarget] con il
-    // pallino centrato dentro. Verificato sul simulatore: prima il tocco
-    // mancava il bersaglio quasi sempre.
+    final signWidth = selected ? 30.0 : 24.0;
+    final signHeight = selected ? 26.0 : 20.0;
+
     return Marker(
       point: LatLng(stop.position.lat, stop.position.lon),
       width: _tapTarget,
       height: _tapTarget,
       child: GestureDetector(
         onTap: () => setState(() {
-          // Chi tocca una fermata la sta guardando: la scheda cambia
-          // altezza, ma la mappa non gli si sposta sotto il dito.
           _mossa = true;
           _selected = (stop: stop, impact: impact);
         }),
         behavior: HitTestBehavior.opaque,
         child: Center(
-          child: isSkipped
-              ? Container(
-                  width: dot,
-                  height: dot,
-                  decoration: BoxDecoration(
-                    color: cartina.chiusa,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 3),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: signWidth,
+                height: signHeight,
+                decoration: BoxDecoration(
+                  color: palinaColor,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: selected ? const Color(0xFFF9D400) : Colors.white,
+                    width: selected ? 2.5 : 1.5,
                   ),
-                  child: const Icon(Icons.close, size: 11, color: Colors.white),
-                )
-              : SizedBox.square(
-                  dimension: dot,
-                  child: CustomPaint(
-                    painter: SegnoFermata(
-                      colore: direzione == null
-                          ? cartina.bordoFermata
-                          : cartina.direzione(direzione),
-                      bordo: selected ? cartina.selezione : null,
-                      gradi: verso,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
                     ),
-                  ),
+                  ],
                 ),
+                child: Center(
+                  child: isSkipped
+                      ? const Icon(Icons.close, size: 14, color: Colors.white)
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.directions_bus,
+                              size: 11,
+                              color: Colors.white,
+                            ),
+                            if (selected && stop.code != null) ...[
+                              const SizedBox(width: 2),
+                              Text(
+                                stop.code!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+              ),
+              Container(
+                width: 2.5,
+                height: selected ? 6 : 4,
+                color: selected
+                    ? const Color(0xFFF9D400)
+                    : (cartina.scura ? Colors.white70 : Colors.black87),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -797,20 +833,28 @@ class _LineMapState extends State<LineMap> {
     final cartina = Cartina.of(context);
     final last = track.points.last;
     final rotta = VehicleHeading.of(track, directions);
-    final Color colore;
-    if (track.isOffRoute) {
-      colore = cartina.chiusa;
-    } else {
-      colore = cartina.mezzo(rotta.directionIndex);
-    }
+    final isOff = track.isOffRoute;
+    final Color colore = isOff ? cartina.chiusa : Colors.black87;
     return Marker(
       point: LatLng(last.position.lat, last.position.lon),
-      width: 40,
-      height: 40,
+      width: 42,
+      height: 42,
       child: CustomPaint(
         painter: SegnoMezzo(colore: colore, gradi: rotta.degrees),
-        child: const Center(
-          child: Icon(Icons.directions_bus, size: 13, color: Colors.white),
+        child: Center(
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: isOff ? const Color(0xFFFF5722) : const Color(0xFF00E676),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.directions_bus,
+              size: 13,
+              color: Colors.black87,
+            ),
+          ),
         ),
       ),
     );
@@ -841,6 +885,7 @@ class FermataToccata extends StatelessWidget {
     this.direction,
     this.saved,
     this.onToggleSave,
+    this.onOpenArrivals,
     super.key,
   });
 
@@ -854,6 +899,7 @@ class FermataToccata extends StatelessWidget {
   /// null quando la mappa non sa salvare.
   final bool? saved;
   final VoidCallback? onToggleSave;
+  final VoidCallback? onOpenArrivals;
   final VoidCallback onClose;
 
   @override
@@ -862,62 +908,122 @@ class FermataToccata extends StatelessWidget {
     final skipped = impact != null;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-      color: skipped
-          ? scheme.errorContainer.withValues(alpha: 0.5)
-          : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-      child: Row(
-        children: [
-          Icon(
-            skipped ? Icons.do_not_disturb_on_outlined : Icons.place_outlined,
-            size: 18,
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: skipped
+            ? scheme.errorContainer.withOpacity(0.55)
+            : scheme.surfaceContainerHighest.withOpacity(0.6),
+        border: Border(
+          top: BorderSide(
             color: skipped ? scheme.error : scheme.primary,
+            width: 2,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  DisplayNames.stop(stop),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                skipped
+                    ? Icons.do_not_disturb_on_outlined
+                    : Icons.signpost_outlined,
+                size: 20,
+                color: skipped ? scheme.error : scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: DisplayNames.stop(stop),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      if (stop.code != null)
+                        TextSpan(
+                          text: '  (Palina ${stop.code})',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.normal,
+                            fontSize: 13,
+                          ),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  [
-                    skipped
-                        ? (impact!.status == StopStatus.declaredSuspended
-                              ? 'sospesa da GTT'
-                              : 'non servita')
-                        : 'servita',
-                    if (stop.code != null) 'fermata ${stop.code}',
-                    if (direction != null) 'verso $direction',
-                  ].join(' · '),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                if (skipped)
-                  for (final alt in impact!.alternatives.take(2))
-                    Text(
-                      '→ ${DisplayNames.stop(alt.stop)}'
-                      '${alt.stop.code == null ? "" : " ${alt.stop.code}"} · '
-                      '${alt.bestKnownMeters.round()} m'
-                      '${alt.sameLine ? "" : " · altre linee"}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-              ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: 'Chiudi',
+                onPressed: onClose,
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            [
+              skipped
+                  ? (impact!.status == StopStatus.declaredSuspended
+                      ? '⚠️ Sospesa da GTT'
+                      : '⚠️ Non servita per deviazione')
+                  : '✓ Servita regolarmente',
+              if (direction != null) 'verso $direction',
+            ].join(' · '),
+            style: TextStyle(
+              color: skipped ? scheme.error : const Color(0xFF2E7D32),
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
             ),
           ),
-          // Salvarla la porta nella home, con la sua risposta: e' il
-          // modo di dire all'app «questa e' la mia fermata».
-          if (saved != null && onToggleSave != null)
-            TextButton.icon(
-              onPressed: onToggleSave,
-              icon: Icon(saved! ? Icons.bookmark : Icons.bookmark_add_outlined),
-              label: Text(saved! ? 'Salvata' : 'Salva'),
-            ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: 'Chiudi',
-            onPressed: onClose,
+          if (skipped) ...[
+            const SizedBox(height: 4),
+            for (final alt in impact!.alternatives.take(2))
+              Text(
+                '→ Dove salire: ${DisplayNames.stop(alt.stop)}'
+                '${alt.stop.code == null ? "" : " (${alt.stop.code})"}'
+                ' · ${alt.bestKnownMeters.round()} m a piedi'
+                '${alt.sameLine ? "" : " (altre linee)"}',
+                style: TextStyle(
+                  color: scheme.onErrorContainer,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (onOpenArrivals != null)
+                FilledButton.tonalIcon(
+                  onPressed: onOpenArrivals,
+                  icon: const Icon(Icons.departure_board, size: 18),
+                  label: const Text('Orari e arrivi in tempo reale'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              const Spacer(),
+              if (saved != null && onToggleSave != null)
+                TextButton.icon(
+                  onPressed: onToggleSave,
+                  icon: Icon(
+                    saved! ? Icons.bookmark : Icons.bookmark_add_outlined,
+                    size: 18,
+                  ),
+                  label: Text(saved! ? 'Salvata' : 'Salva'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+            ],
           ),
         ],
       ),

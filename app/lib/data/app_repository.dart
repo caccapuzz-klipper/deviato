@@ -495,6 +495,61 @@ class AppRepository extends ChangeNotifier {
       ..addAll(stati);
   }
 
+  /// Carica percorsi e stato di una qualsiasi linea [line] su richiesta,
+  /// anche se non ancora salvata nella watchlist, restituendo il suo [LineStatus].
+  Future<LineStatus?> loadLine(TransitLine line) async {
+    if (_statuses.containsKey(line.routeId)) return _statuses[line.routeId];
+
+    try {
+      final file = FormatoPubblicato.nomeFile(line.routeId);
+      final p = await _fonte.scarica('percorsi/$file') ??
+          await _fonte.salvato('percorsi/$file');
+      if (p == null) return null;
+      final percorsi = FormatoPubblicato.leggiPercorsi(p).shapes;
+      if (percorsi.isEmpty) return null;
+
+      final idx = index ??= GtfsIndex(
+        feedVersion: _feed,
+        builtAt: DateTime.now(),
+        lines: {},
+        shapes: {},
+        stops: {},
+      );
+      idx.lines[line.routeId] = line;
+      idx.shapes[line.routeId] = percorsi;
+      for (final s in percorsi) {
+        for (final f in s.stops) {
+          idx.stops[f.id] = f;
+        }
+      }
+
+      final st = await _fonte.scarica('stato/$file') ??
+          await _fonte.salvato('stato/$file');
+      LineStatus? s;
+      if (st != null) {
+        s = FormatoPubblicato.leggiStato(
+          st,
+          idx,
+          controllata: generato ?? DateTime.now(),
+        );
+      }
+      s ??= LineStatus(
+        line: line,
+        shape: percorsi.first,
+        shapeReturn: percorsi.length > 1 ? percorsi[1] : null,
+        allShapes: percorsi,
+        reports: const [],
+        checkedAt: generato ?? DateTime.now(),
+      );
+      _statuses[line.routeId] = s;
+      notifyListeners();
+      return s;
+    } catch (e) {
+      debugPrint('Errore caricamento linea ${line.routeId}: $e');
+      return null;
+    }
+  }
+
   /// Aggiunge [line]: se ne scaricano percorsi e stato, e basta.
   Future<void> addLine(TransitLine line) async {
     if (index?.lines.containsKey(line.routeId) ?? false) return;
