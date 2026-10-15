@@ -56,7 +56,37 @@ class _StopScreenState extends State<StopScreen> {
   }
 
   Future<void> _carica() async {
-    final code = widget.stop.code ?? widget.stop.id;
+    var code = widget.stop.code?.trim() ?? '';
+    if (code.isEmpty) {
+      if (widget.fermataCercabile?.stop.code != null &&
+          widget.fermataCercabile!.stop.code!.trim().isNotEmpty) {
+        code = widget.fermataCercabile!.stop.code!.trim();
+      }
+    }
+    if (code.isEmpty) {
+      final match = widget.repo.fermateRete?.fermate
+          .where((f) => f.stop.id == widget.stop.id)
+          .firstOrNull;
+      if (match?.stop.code != null && match!.stop.code!.trim().isNotEmpty) {
+        code = match.stop.code!.trim();
+      }
+    }
+    if (code.isEmpty) {
+      final match = RegExp(r'fermata\s+(\d+)', caseSensitive: false)
+          .firstMatch(widget.stop.name);
+      if (match != null) {
+        code = match.group(1)!;
+      }
+    }
+    if (code.isEmpty) {
+      final soloNumeri = widget.stop.id.replaceAll(RegExp(r'[^0-9]'), '');
+      if (soloNumeri.isNotEmpty) {
+        code = soloNumeri;
+      } else {
+        code = widget.stop.id.trim();
+      }
+    }
+
     if (code.isEmpty) {
       setState(() {
         _errore = 'Numero di palina non disponibile per questa fermata.';
@@ -81,7 +111,7 @@ class _StopScreenState extends State<StopScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errore = 'Impossibile scaricare gli arrivi in tempo reale. '
+        _errore = 'Impossibile scaricare gli arrivi per la palina $code in tempo reale.\n'
             'Verifica la connessione internet e riprova.';
         _loading = false;
       });
@@ -205,7 +235,11 @@ class _StopScreenState extends State<StopScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Fermata ${widget.stop.code ?? ""}',
+                        arrivi != null && arrivi.stopCode.isNotEmpty
+                            ? 'Palina ${arrivi.stopCode}'
+                            : (widget.stop.code != null && widget.stop.code!.isNotEmpty
+                                ? 'Palina ${widget.stop.code}'
+                                : 'Fermata ${widget.stop.name}'),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -447,7 +481,11 @@ class _StopScreenState extends State<StopScreen> {
   }
 
   Widget? _buildDeviazioniAvviso(ThemeData theme, StatusColors statusColors) {
-    final passaggi = widget.fermataCercabile?.passaggi;
+    final passaggi = widget.fermataCercabile?.passaggi ??
+        widget.repo.fermateRete?.fermate
+            .where((f) => f.stop.id == widget.stop.id)
+            .firstOrNull
+            ?.passaggi;
     if (passaggi == null || passaggi.isEmpty) return null;
 
     final chiuse = <({TransitLine line, StopAnswer answer})>[];

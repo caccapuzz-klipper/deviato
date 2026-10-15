@@ -126,12 +126,14 @@ class TripUpdatesGttSource {
     String palinaCode, {
     String? stopId,
   }) async {
+    final cleanCode = palinaCode.trim();
+    final sep = GttConfig.transitiPalinaUrl.contains('?') ? '&' : '?';
     final url =
-        '${GttConfig.transitiPalinaUrl}?palina=${Uri.encodeComponent(palinaCode)}&bacino=U&realtime=true&get_param=value';
+        '${GttConfig.transitiPalinaUrl}${sep}palina=${Uri.encodeComponent(cleanCode)}&bacino=U&realtime=true&get_param=value';
     final jsonText = await _http.getText(url, timeout: const Duration(seconds: 10));
     return parseJsonTransiti(
       jsonText,
-      stopCode: palinaCode,
+      stopCode: cleanCode,
       stopId: stopId,
       now: DateTime.now(),
     );
