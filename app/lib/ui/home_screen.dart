@@ -70,6 +70,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () => showLinePicker(context, widget.repo),
               ),
               IconButton(
+                icon: const Icon(Icons.sensors),
+                tooltip: 'Radar bus live',
+                onPressed: () => _mostraRadarMezzi(context),
+              ),
+              IconButton(
                 icon: const Icon(Icons.info_outline),
                 tooltip: 'Informazioni',
                 onPressed: () => Navigator.push(
@@ -552,27 +557,47 @@ class _HomeScreenState extends State<HomeScreen> {
               lettore: lettore,
             ),
           );
+    final isWatching = widget.repo.isWatching(line.routeId);
+    final watchTracks = isWatching ? widget.repo.liveTracks : const <VehicleTrack>[];
+
+    return Dismissible(
+      key: ValueKey('linea-fav-${line.routeId}'),
+      direction: DismissDirection.endToStart,
+      background: const _SwipeBackground(label: 'Rimuovi'),
+      onDismissed: (_) async {
+        final messenger = ScaffoldMessenger.of(context);
+        final lettore = MediaQuery.accessibleNavigationOf(context);
+        final tolta = await widget.repo.removeLine(line);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            _annullabile(
+              'Linea ${line.shortName} rimossa dai preferiti',
+              () => widget.repo.restoreLine(tolta),
+              lettore: lettore,
+            ),
+          );
       },
       child: Card(
-        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
         elevation: 0,
         color: isDeviata
             ? scheme.errorContainer.withValues(alpha: 0.35)
             : scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: isDeviata
               ? BorderSide(color: scheme.error, width: 1.5)
-              : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+              : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  LineBadge(line: line, height: 28),
+                  LineBadge(line: line, height: 30),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -580,7 +605,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Text(
                           parti.route,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -600,10 +625,10 @@ class _HomeScreenState extends State<HomeScreen> {
               if (isDeviata)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
                     color: scheme.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,10 +678,10 @@ class _HomeScreenState extends State<HomeScreen> {
               else if (isRegolare)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
                     color: colori.ok.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
@@ -676,9 +701,55 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
+              // Banner tracking attivo
+              if (isWatching)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E1E),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF00E676),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          watchTracks.isEmpty
+                              ? 'Tracking live: ricerca bus in corso…'
+                              : 'Live: ${watchTracks.length} ${watchTracks.length == 1 ? "bus" : "bus"} in tempo reale',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _apri(context, line),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: const Color(0xFFF9D400),
+                        ),
+                        child: const Text('Mappa'),
+                      ),
+                    ],
+                  ),
+                ),
+
               const SizedBox(height: 10),
-              // DUE AZIONI: ORARI IMMEDIATI SENZA PERCORSO e PERCORSO SU MAPPA
-              Row(
+              // AZIONI: ORARI SENZA PERCORSO, TRACCIA BUS LIVE, MAPPA
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   FilledButton.tonalIcon(
                     onPressed: () => _mostraOrariFermateLinea(context, line, status),
@@ -688,11 +759,31 @@ class _HomeScreenState extends State<HomeScreen> {
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: () {
+                      if (!isWatching) {
+                        widget.repo.startWatch(line);
+                      }
+                      _apri(context, line);
+                    },
+                    icon: Icon(
+                      Icons.sensors,
+                      size: 16,
+                      color: isWatching ? const Color(0xFF00E676) : null,
+                    ),
+                    label: Text(
+                      isWatching
+                          ? 'Mezzi live (${watchTracks.length})'
+                          : 'Traccia bus live',
+                    ),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
                   OutlinedButton.icon(
                     onPressed: () => _apri(context, line),
                     icon: const Icon(Icons.map_outlined, size: 16),
-                    label: const Text('Percorso mappa'),
+                    label: const Text('Mappa'),
                     style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
                     ),
@@ -914,6 +1005,25 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.85,
         child: _FermateVicineSheet(repo: widget.repo),
+      ),
+    );
+  }
+
+  void _mostraRadarMezzi(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: _RadarMezziSheet(
+          repo: widget.repo,
+          onApriLinea: (l) {
+            Navigator.pop(context);
+            _apri(context, l);
+          },
+        ),
       ),
     );
   }
@@ -1955,6 +2065,314 @@ class _ScioperoDettaglioSheet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Foglio modale per il tracking in tempo reale e radar della rete GTT.
+class _RadarMezziSheet extends StatelessWidget {
+  const _RadarMezziSheet({
+    required this.repo,
+    required this.onApriLinea,
+  });
+
+  final AppRepository repo;
+  final ValueChanged<TransitLine> onApriLinea;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colori = StatusColors.of(context);
+    final watchingLine = repo.watchingLine;
+    final watchingTracks = repo.liveTracks;
+    final lines = repo.lines;
+
+    return ListenableBuilder(
+      listenable: repo,
+      builder: (context, _) {
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00E676).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.sensors,
+                    color: Color(0xFF00C853),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Radar Mezzi in Tempo Reale',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Posizioni GPS in tempo reale dai feed GTFS-RT di GTT',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Linea attualmente monitorata
+            if (watchingLine != null) ...[
+              Card(
+                elevation: 0,
+                color: const Color(0xFF1E1E1E),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFF00E676), width: 1.5),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF00E676),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'OSSERVAZIONE ATTIVA ORA',
+                            style: TextStyle(
+                              color: Color(0xFF00E676),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.stop_circle_outlined,
+                              color: Colors.white70,
+                            ),
+                            tooltip: 'Interrompi tracking',
+                            onPressed: repo.stopWatch,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          LineBadge(line: watchingLine, height: 32),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  watchingLine.longName ??
+                                      'Linea ${watchingLine.shortName}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  watchingTracks.isEmpty
+                                      ? 'Ricerca bus nel feed GTT…'
+                                      : '${watchingTracks.length} ${watchingTracks.length == 1 ? "mezzo" : "mezzi"} sulla mappa',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => onApriLinea(watchingLine),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFF9D400),
+                            foregroundColor: const Color(0xFF1E1E1E),
+                          ),
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text('Guarda i bus sulla mappa'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            Text(
+              'LE TUE LINEE SALVATE',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            if (lines.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    'Non hai ancora salvato linee tra i preferiti.\n'
+                    'Aggiungi le tue linee abituali per tracciarle con un tocco.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              )
+            else
+              for (final l in lines) ...[
+                Builder(
+                  builder: (context) {
+                    final isThisWatching = watchingLine?.routeId == l.routeId;
+                    final status = repo.statusOf(l.routeId);
+                    final isDeviata =
+                        status != null && status.activeReports.isNotEmpty;
+
+                    return Card(
+                      elevation: 0,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      color: isThisWatching
+                          ? scheme.primaryContainer.withValues(alpha: 0.2)
+                          : scheme.surfaceContainerHighest.withValues(
+                              alpha: 0.4,
+                            ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: isThisWatching
+                              ? const Color(0xFF00E676)
+                              : scheme.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: ListTile(
+                        leading: LineBadge(line: l, height: 28),
+                        title: Text(
+                          l.longName ?? 'Linea ${l.shortName}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Row(
+                          children: [
+                            if (isDeviata)
+                              Text(
+                                '⚠️ DEVIATA',
+                                style: TextStyle(
+                                  color: scheme.error,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              )
+                            else
+                              Text(
+                                '🟢 Regolare',
+                                style: TextStyle(
+                                  color: colori.ok,
+                                  fontSize: 11,
+                                ),
+                              ),
+                          ],
+                        ),
+                        trailing: FilledButton.tonalIcon(
+                          onPressed: () {
+                            if (!isThisWatching) {
+                              repo.startWatch(l);
+                            }
+                            onApriLinea(l);
+                          },
+                          icon: Icon(
+                            isThisWatching ? Icons.visibility : Icons.sensors,
+                            size: 14,
+                            color: isThisWatching
+                                ? const Color(0xFF00E676)
+                                : null,
+                          ),
+                          label: Text(
+                            isThisWatching ? 'In corso' : 'Traccia live',
+                          ),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'I dati provengono direttamente dal feed aperto GTFS-Realtime di GTT '
+                      '(vehicle_position.aspx) senza intermediari e senza profilazione.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

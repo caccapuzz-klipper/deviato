@@ -17,6 +17,7 @@ import '../core/pipeline/vehicle_watch.dart';
 import '../core/text/display_names.dart';
 import '../data/user_location.dart';
 import 'cartina.dart';
+import 'line_badge.dart';
 import 'theme.dart';
 
 /// Una fermata toccata sulla mappa, con il suo esito se non e' servita.
@@ -155,6 +156,9 @@ class _LineMapState extends State<LineMap> {
     }
   }
 
+  /// Il veicolo toccato in tempo reale per consultare dettagli e tracciamento.
+  VehicleTrack? _selectedVehicle;
+
   void _ridisegna() {
     if (mounted) setState(() {});
   }
@@ -171,6 +175,13 @@ class _LineMapState extends State<LineMap> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !_mossa) _fitRoute();
       });
+    }
+    // Aggiorna il mezzo selezionato se i dati sono cambiati
+    if (_selectedVehicle != null) {
+      final updated = widget.vehicles
+          .where((v) => v.vehicleId == _selectedVehicle!.vehicleId)
+          .firstOrNull;
+      _selectedVehicle = updated;
     }
   }
 
@@ -450,10 +461,10 @@ class _LineMapState extends State<LineMap> {
             onPositionChanged: (_, conLeDita) {
               if (conLeDita) _mossa = true;
             },
-            // Un tocco a vuoto chiude la fermata aperta; se non ce
-            // n'e', nel dettaglio apre la mappa a tutto schermo.
             onTap: (_, _) {
-              if (_selected != null) {
+              if (_selectedVehicle != null) {
+                setState(() => _selectedVehicle = null);
+              } else if (_selected != null) {
                 setState(() => _selected = null);
               } else {
                 widget.onOpenFullScreen?.call();
@@ -563,6 +574,74 @@ class _LineMapState extends State<LineMap> {
             ),
           ],
         ),
+        // Pulsante rapido traccia bus in tempo reale in alto a destra
+        if (widget.onToggleWatch != null)
+          Positioned(
+            top: widget.inset.top + 8,
+            right: 8,
+            child: Material(
+              elevation: 4,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(20),
+              color: widget.watching
+                  ? const Color(0xFF1E1E1E)
+                  : Theme.of(context).colorScheme.surface,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: widget.onToggleWatch,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.watching) ...[
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF00E676),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.watchCount == 0
+                              ? 'Ricerca bus…'
+                              : '${widget.watchCount} bus live',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.stop_circle_outlined,
+                          size: 16,
+                          color: Colors.white70,
+                        ),
+                      ] else ...[
+                        Icon(
+                          Icons.sensors,
+                          size: 15,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Traccia bus live',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (widget.fullScreen)
           widget.scheda?.call(context, _comandiInRiga()) ??
               Positioned(
@@ -619,7 +698,18 @@ class _LineMapState extends State<LineMap> {
     return Column(
       children: [
         SizedBox(height: widget.height, child: mappa),
-        if (_selected != null)
+        if (_selectedVehicle != null)
+          VeicoloToccato(
+            track: _selectedVehicle!,
+            line: status.line,
+            directions: [for (final d in directions) d.shape],
+            onClose: () => setState(() => _selectedVehicle = null),
+            onCenter: () {
+              final last = _selectedVehicle!.points.last;
+              _map.move(LatLng(last.position.lat, last.position.lon), 16);
+            },
+          )
+        else if (_selected != null)
           FermataToccata(
             stop: _selected!.stop,
             impact: _selected!.impact,
@@ -695,6 +785,7 @@ class _LineMapState extends State<LineMap> {
       child: GestureDetector(
         onTap: () => setState(() {
           _mossa = true;
+          _selectedVehicle = null;
           _selected = (stop: stop, impact: impact);
         }),
         behavior: HitTestBehavior.opaque,
@@ -834,27 +925,69 @@ class _LineMapState extends State<LineMap> {
     final last = track.points.last;
     final rotta = VehicleHeading.of(track, directions);
     final isOff = track.isOffRoute;
+    final isSelected = _selectedVehicle?.vehicleId == track.vehicleId;
     final Color colore = isOff ? cartina.chiusa : Colors.black87;
+
     return Marker(
       point: LatLng(last.position.lat, last.position.lon),
-      width: 42,
-      height: 42,
-      child: CustomPaint(
-        painter: SegnoMezzo(colore: colore, gradi: rotta.degrees),
-        child: Center(
-          child: Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              color: isOff ? const Color(0xFFFF5722) : const Color(0xFF00E676),
-              shape: BoxShape.circle,
+      width: isSelected ? 52 : 44,
+      height: isSelected ? 52 : 44,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          setState(() {
+            _selected = null;
+            _selectedVehicle = track;
+          });
+        },
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (isSelected)
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFF9D400).withValues(alpha: 0.35),
+                  border: Border.all(
+                    color: const Color(0xFFF9D400),
+                    width: 2.5,
+                  ),
+                ),
+              ),
+            CustomPaint(
+              size: Size(isSelected ? 44 : 38, isSelected ? 44 : 38),
+              painter: SegnoMezzo(
+                colore: colore,
+                gradi: rotta.degrees,
+              ),
+              child: Center(
+                child: Container(
+                  width: isSelected ? 24 : 20,
+                  height: isSelected ? 24 : 20,
+                  decoration: BoxDecoration(
+                    color: isOff
+                        ? const Color(0xFFFF5722)
+                        : const Color(0xFF00E676),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.directions_bus,
+                    size: isSelected ? 15 : 12,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
             ),
-            child: const Icon(
-              Icons.directions_bus,
-              size: 13,
-              color: Colors.black87,
-            ),
-          ),
+          ],
         ),
       ),
     );
@@ -1023,6 +1156,166 @@ class FermataToccata extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Scheda informativa che appare quando si tocca un mezzo sulla mappa in tempo reale.
+class VeicoloToccato extends StatelessWidget {
+  const VeicoloToccato({
+    required this.track,
+    required this.line,
+    required this.directions,
+    required this.onClose,
+    required this.onCenter,
+    super.key,
+  });
+
+  final VehicleTrack track;
+  final TransitLine line;
+  final List<RouteShape> directions;
+  final VoidCallback onClose;
+  final VoidCallback onCenter;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final last = track.points.last;
+    final rotta = VehicleHeading.of(track, directions);
+    final isOff = track.isOffRoute;
+    final dirIndex = rotta.directionIndex;
+    final capolinea = dirIndex != null && dirIndex < directions.length
+        ? DisplayNames.direction(
+            directions[dirIndex].headsign,
+            longName: line.longName,
+          )
+        : null;
+
+    final secondiFa = DateTime.now().difference(last.seenAt).inSeconds;
+    final tempoStr = secondiFa < 60
+        ? '${secondiFa}s fa'
+        : '${(secondiFa / 60).round()} min fa';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: isOff
+            ? scheme.errorContainer.withValues(alpha: 0.85)
+            : scheme.surfaceContainerHighest,
+        border: Border(
+          top: BorderSide(
+            color: isOff ? scheme.error : const Color(0xFF00E676),
+            width: 2.5,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              LineBadge(line: line, height: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Mezzo #${track.vehicleId}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isOff
+                                ? scheme.error
+                                : const Color(0xFF00E676),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isOff ? 'FUORI PERCORSO' : 'IN LINEA',
+                            style: TextStyle(
+                              color: isOff ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (capolinea != null)
+                      Text(
+                        'Verso $capolinea',
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: 'Chiudi',
+                onPressed: onClose,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.gps_fixed, size: 14, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                'Posizione GPS: $tempoStr',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+              if (last.bearing != null) ...[
+                const SizedBox(width: 12),
+                Icon(Icons.navigation, size: 13, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 2),
+                Text(
+                  '${last.bearing!.round()}°',
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              FilledButton.tonalIcon(
+                onPressed: onCenter,
+                icon: const Icon(Icons.center_focus_strong, size: 15),
+                label: const Text('Centra mezzo'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
             ],
           ),
         ],

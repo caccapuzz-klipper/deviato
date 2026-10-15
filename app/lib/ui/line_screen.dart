@@ -320,6 +320,9 @@ class _LineScreenState extends State<LineScreen> {
                   widget.repo.isSaved(_salvata(stop, shape)),
               onToggleSave: (stop, shape) => _salva(stop, shape),
               onOpenFullScreen: _apriMappa,
+              onToggleWatch: osservando ? widget.repo.stopWatch : _startWatch,
+              watching: osservando,
+              watchCount: widget.repo.liveTracks.length,
               onOpenArrivals: (stop) {
                 Navigator.push(
                   context,
