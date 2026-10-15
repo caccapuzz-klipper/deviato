@@ -11,6 +11,7 @@ import '../core/pipeline/arrivi_fermata.dart';
 import '../core/pipeline/line_search.dart';
 import '../core/pipeline/stop_answer.dart';
 import '../core/pipeline/stop_search.dart';
+import '../core/pipeline/vehicle_watch.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
 import '../data/user_location.dart';
@@ -430,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    'Sali alla fermata ${DisplayNames.stop(risposta.walkTo.first.stop)} (${risposta.walkTo.first.stop.code ?? ""}) a circa ${risposta.walkTo.first.metri}m',
+                                    'Sali alla fermata ${DisplayNames.stop(risposta.walkTo.first.stop)} (${risposta.walkTo.first.stop.code ?? ""}) a circa ${risposta.walkTo.first.meters.round()}m',
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -540,23 +541,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final isRegolare = status != null && status.activeReports.isEmpty;
     final skippedStops = status?.allSkippedStops ?? const [];
 
-    return Dismissible(
-      key: ValueKey('linea-fav-${line.routeId}'),
-      direction: DismissDirection.endToStart,
-      background: const _SwipeBackground(label: 'Rimuovi'),
-      onDismissed: (_) async {
-        final messenger = ScaffoldMessenger.of(context);
-        final lettore = MediaQuery.accessibleNavigationOf(context);
-        final tolta = await widget.repo.removeLine(line);
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            _annullabile(
-              'Linea ${line.shortName} rimossa dai preferiti',
-              () => widget.repo.restoreLine(tolta),
-              lettore: lettore,
-            ),
-          );
     final isWatching = widget.repo.isWatching(line.routeId);
     final watchTracks = isWatching ? widget.repo.liveTracks : const <VehicleTrack>[];
 

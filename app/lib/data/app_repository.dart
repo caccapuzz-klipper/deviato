@@ -481,8 +481,9 @@ class AppRepository extends ChangeNotifier {
       if (sj != null && sj['scioperi'] is List) {
         scioperi = [
           for (final raw in (sj['scioperi'] as List))
-            if (raw is Map<String, dynamic> && Sciopero.fromJson(raw) case final s?)
-              s,
+            if (raw is Map<String, dynamic>)
+              if (Sciopero.fromJson(raw) case final s?)
+                s,
         ];
       }
     } catch (_) {}

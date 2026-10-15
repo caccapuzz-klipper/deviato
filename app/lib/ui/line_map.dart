@@ -836,6 +836,7 @@ class _LineMapState extends State<LineMap> {
                             ],
                           ],
                         ),
+                ),
               ),
               Container(
                 width: 2.5,
