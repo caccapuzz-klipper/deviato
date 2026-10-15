@@ -634,11 +634,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       if (status.activeReports.isNotEmpty &&
-                          status.activeReports.first.notice.title.isNotEmpty)
+                          (status.activeReports.first.notice.headline ?? status.activeReports.first.notice.text).isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2, left: 22),
                           child: Text(
-                            status.activeReports.first.notice.title,
+                            status.activeReports.first.notice.headline ?? status.activeReports.first.notice.text,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: scheme.onErrorContainer, fontSize: 12),
