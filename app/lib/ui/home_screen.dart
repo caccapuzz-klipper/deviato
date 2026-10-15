@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/config.dart';
 import '../core/deviation_service.dart';
 import '../core/geo/projection.dart';
+import '../core/models/saved_journey.dart';
 import '../core/models/saved_stop.dart';
 import '../core/models/transit.dart';
 import '../core/sources/scioperi_mit.dart';
@@ -16,11 +17,13 @@ import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
 import '../data/user_location.dart';
 import 'info_screen.dart';
+import 'journey_editor_screen.dart';
 import 'line_badge.dart';
 import 'line_picker.dart';
 import 'line_screen.dart';
 import 'line_tile.dart';
 import 'logo.dart';
+import 'saved_journey_screen.dart';
 import 'saved_stop_card.dart';
 import 'stop_screen.dart';
 import 'theme.dart';
@@ -241,6 +244,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
+        // Pagine di salvataggio percorsi con cambi
+        _sezionePercorsiSalvati(context),
+
         // Fermate di maggior interesse
         if (fermate.isNotEmpty) ...[
           const _SectionTitle('Fermate di maggior interesse (Orari immediati)'),
@@ -261,6 +267,249 @@ class _HomeScreenState extends State<HomeScreen> {
             _schedaLineaInteresse(context, line),
         ],
       ],
+    );
+  }
+
+  Widget _sezionePercorsiSalvati(BuildContext context) {
+    final journeys = widget.repo.savedJourneys;
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Pagine di salvataggio (Fino a 3 cambi)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => JourneyEditorScreen(repo: widget.repo),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Nuovo percorso'),
+                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+              ),
+            ],
+          ),
+        ),
+        if (journeys.isEmpty)
+          Card(
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            elevation: 0,
+            color: scheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.alt_route, color: scheme.primary, size: 20),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Crea i tuoi percorsi con cambi',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Salva diverse pagine (es. Casa ➔ Lavoro) con fino a 3 cambi: '
+                    'seleziona fermate preferenziali, linee da visionare, tempo a piedi e '
+                    'tocca un orario per vedere la coincidenza in highlight.',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => JourneyEditorScreen(repo: widget.repo),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add_road),
+                    label: const Text('Crea prima pagina percorso'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          for (final j in journeys) _schedaPercorsoSalvato(context, j),
+      ],
+    );
+  }
+
+  Widget _schedaPercorsoSalvato(BuildContext context, SavedJourneyPage j) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      elevation: 0,
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => SavedJourneyScreen(journey: j, repo: widget.repo),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.alt_route, color: scheme.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          j.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          '${j.cambiCount} ${j.cambiCount == 1 ? "cambio" : "cambi"} · ${j.steps.length} tratte',
+                          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (val) {
+                      if (val == 'modifica') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => JourneyEditorScreen(
+                              repo: widget.repo,
+                              initialJourney: j,
+                            ),
+                          ),
+                        );
+                      } else if (val == 'elimina') {
+                        widget.repo.removeSavedJourney(j.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Percorso "${j.name}" eliminato')),
+                        );
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'modifica',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Modifica'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'elimina',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Elimina', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Sintesi tappe
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < j.steps.length; i++) ...[
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 9,
+                            backgroundColor: scheme.primary,
+                            foregroundColor: scheme.onPrimary,
+                            child: Text(
+                              '${i + 1}',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${j.steps[i].title}: ${j.steps[i].stopNames.values.join(", ")} '
+                              '(${j.steps[i].lineNames.join(", ")})',
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (i < j.steps.length - 1)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Icon(Icons.arrow_downward, size: 12, color: scheme.onSurfaceVariant),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => SavedJourneyScreen(journey: j, repo: widget.repo),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.schedule, size: 16),
+                    label: const Text('Apri orari e coincidenze'),
+                    style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

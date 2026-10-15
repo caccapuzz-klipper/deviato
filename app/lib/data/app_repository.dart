@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/deviation_service.dart';
 import '../core/io/formato_pubblicato.dart';
+import '../core/models/saved_journey.dart';
 import '../core/models/saved_stop.dart';
 import '../core/models/transit.dart';
 import '../core/pipeline/line_resolver.dart';
@@ -703,6 +704,19 @@ class AppRepository extends ChangeNotifier {
 
   Future<void> dismissStopsHint() async {
     await settings.setStopsHintSeen();
+    notifyListeners();
+  }
+
+  /// Pagine di salvataggio percorsi con cambi multipli.
+  List<SavedJourneyPage> get savedJourneys => settings.savedJourneys;
+
+  Future<void> saveJourney(SavedJourneyPage journey) async {
+    await settings.saveJourney(journey);
+    notifyListeners();
+  }
+
+  Future<void> removeSavedJourney(String id) async {
+    await settings.removeSavedJourney(id);
     notifyListeners();
   }
 

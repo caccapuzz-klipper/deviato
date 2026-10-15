@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/models/saved_journey.dart';
 import '../core/models/saved_stop.dart';
 
 /// Le poche cose che l'app deve ricordare: le linee e le fermate di chi la
@@ -15,6 +16,7 @@ class Settings {
 
   static const _kWatchlist = 'watchlist';
   static const _kSavedStops = 'fermate_salvate';
+  static const _kSavedJourneys = 'pagine_salvate_percorsi';
   static const _kStopsHintSeen = 'suggerimento_fermate_visto';
 
   final SharedPreferences _prefs;
@@ -87,4 +89,38 @@ class Settings {
 
   Future<void> setStopsHintSeen() => _prefs.setBool(_kStopsHintSeen, true);
 
+  /// Pagine di salvataggio percorsi con cambi multipli.
+  List<SavedJourneyPage> get savedJourneys => [
+        for (final raw in _prefs.getStringList(_kSavedJourneys) ?? const [])
+          ?_decodeJourney(raw),
+      ];
+
+  Future<void> setSavedJourneys(List<SavedJourneyPage> journeys) =>
+      _prefs.setStringList(
+        _kSavedJourneys,
+        [for (final j in journeys) jsonEncode(j.toJson())],
+      );
+
+  Future<void> saveJourney(SavedJourneyPage journey) async {
+    final current = savedJourneys;
+    final index = current.indexWhere((j) => j.id == journey.id);
+    if (index >= 0) {
+      final updated = current.toList();
+      updated[index] = journey;
+      await setSavedJourneys(updated);
+    } else {
+      await setSavedJourneys([...current, journey]);
+    }
+  }
+
+  Future<void> removeSavedJourney(String id) =>
+      setSavedJourneys(savedJourneys.where((j) => j.id != id).toList());
+
+  static SavedJourneyPage? _decodeJourney(String raw) {
+    try {
+      return SavedJourneyPage.fromJson(jsonDecode(raw));
+    } on FormatException {
+      return null;
+    }
+  }
 }
