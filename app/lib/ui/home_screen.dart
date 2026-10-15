@@ -45,7 +45,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _sezione = 0; // 0: Di maggior interesse (orari rapidi), 1: Tutte le linee (mappe)
+  int _sezione = 0; // 0: Di maggior interesse, 1: Linee salvate (con fermate), 2: Tutte le linee (mappe)
   final _filtroLinee = TextEditingController();
 
   @override
@@ -60,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
       listenable: widget.repo,
       builder: (context, _) {
         return Scaffold(
+          drawer: _buildDrawer(context),
           appBar: AppBar(
             title: const DeviatoLogo(),
             actions: [
@@ -93,6 +94,196 @@ class _HomeScreenState extends State<HomeScreen> {
           body: _body(context),
         );
       },
+    );
+  }
+
+  Widget _buildDrawer(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final repo = widget.repo;
+    final percorsiCount = repo.savedJourneys.length;
+    final lineeCount = repo.lines.length;
+    final fermateCount = repo.savedStops.length;
+
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  scheme.primaryContainer,
+                  scheme.surfaceContainerHighest,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const DeviatoLogo(),
+                const SizedBox(height: 8),
+                Text(
+                  'DeviaTo · GTT Torino',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Mappe, orari in tempo reale e percorsi',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: Icon(Icons.alt_route, color: scheme.primary),
+            title: const Text('Pagine di salvataggio (Percorsi)', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('$percorsiCount ${percorsiCount == 1 ? "percorso con cambi" : "percorsi con cambi"}'),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$percorsiCount',
+                style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer, fontSize: 12),
+              ),
+            ),
+            selected: _sezione == 0,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _sezione = 0);
+            },
+          ),
+          if (repo.savedJourneys.isNotEmpty) ...[
+            for (final j in repo.savedJourneys)
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.subdirectory_arrow_right, size: 18),
+                  title: Text(j.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${j.cambiCount} ${j.cambiCount == 1 ? "cambio" : "cambi"}'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => SavedJourneyScreen(journey: j, repo: widget.repo),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => JourneyEditorScreen(repo: widget.repo),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.add_road, size: 18),
+              label: const Text('Crea nuovo percorso con cambi'),
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(Icons.directions_bus, color: scheme.primary),
+            title: const Text('Linee salvate & Fermate', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Esplora fermate e orari con 1 clic'),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$lineeCount',
+                style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer, fontSize: 12),
+              ),
+            ),
+            selected: _sezione == 1,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _sezione = 1);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.star, color: Colors.amber[700]),
+            title: const Text('Fermate di interesse (Rapidi)', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('$fermateCount ${fermateCount == 1 ? "fermata salvata" : "fermate salvate"}'),
+            selected: _sezione == 0,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _sezione = 0);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.map_outlined),
+            title: const Text('Tutte le linee (Mappe)', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Catalogo completo e percorsi grafici'),
+            selected: _sezione == 2,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _sezione = 2);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.sensors),
+            title: const Text('Radar Bus Live (GPS)'),
+            subtitle: const Text('Visualizza i mezzi in movimento'),
+            onTap: () {
+              Navigator.pop(context);
+              _mostraRadarMezzi(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.near_me_outlined),
+            title: const Text('Fermate vicine a me'),
+            subtitle: const Text('Localizzazione con coordinate GPS'),
+            onTap: () {
+              Navigator.pop(context);
+              _mostraFermateVicine(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.search),
+            title: const Text('Cerca linea o fermata'),
+            onTap: () {
+              Navigator.pop(context);
+              showLinePicker(context, widget.repo);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('Informazioni & Note di rilascio'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => InfoScreen(repo: widget.repo),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -140,12 +331,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ButtonSegment<int>(
                   value: 0,
                   icon: Icon(Icons.star, size: 18),
-                  label: Text('Di maggior interesse'),
+                  label: Text('Di interesse'),
                 ),
                 ButtonSegment<int>(
                   value: 1,
+                  icon: Icon(Icons.directions_bus, size: 18),
+                  label: Text('Linee salvate'),
+                ),
+                ButtonSegment<int>(
+                  value: 2,
                   icon: Icon(Icons.map_outlined, size: 18),
-                  label: Text('Tutte le linee (Mappe)'),
+                  label: Text('Tutte le linee'),
                 ),
               ],
               selected: {_sezione},
@@ -155,6 +351,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
           if (_sezione == 0)
             _sezioneMaggiorInteresse(context, fermate, lines, byId)
+          else if (_sezione == 1)
+            _sezioneLineeSalvate(context, lines)
           else
             _sezioneTutteLeLinee(context),
         ],
@@ -1030,6 +1228,90 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _sezioneLineeSalvate(BuildContext context, List<TransitLine> lines) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          elevation: 0,
+          color: scheme.surfaceContainerHighest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(Icons.directions_bus, color: scheme.primary, size: 26),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Linee salvate e fermate',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      Text(
+                        'Tocca qualsiasi fermata della linea per visualizzarne gli orari in tempo reale e se è deviata.',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () => showLinePicker(context, widget.repo),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Aggiungi'),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        if (lines.isEmpty)
+          Card(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(Icons.directions_bus_outlined, size: 48, color: scheme.primary),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Nessuna linea salvata',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Aggiungi le linee che prendi più spesso per visualizzarne '
+                    'tutte le fermate in sequenza e cliccarci sopra facilmente per vedere i passaggi in tempo reale.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => showLinePicker(context, widget.repo),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Aggiungi linea da seguire'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          for (final line in lines)
+            _CardLineaSalvataConFermate(
+              line: line,
+              repo: widget.repo,
+              onApriMappa: () => _apri(context, line),
+            ),
+      ],
+    );
+  }
+
   Widget _sezioneTutteLeLinee(BuildContext context) {
     final repo = widget.repo;
     final scheme = Theme.of(context).colorScheme;
@@ -1287,6 +1569,400 @@ class _HomeScreenState extends State<HomeScreen> {
     persist: lettore,
     action: SnackBarAction(label: 'Annulla', onPressed: annulla),
   );
+}
+
+class _CardLineaSalvataConFermate extends StatefulWidget {
+  const _CardLineaSalvataConFermate({
+    required this.line,
+    required this.repo,
+    required this.onApriMappa,
+  });
+
+  final TransitLine line;
+  final AppRepository repo;
+  final VoidCallback onApriMappa;
+
+  @override
+  State<_CardLineaSalvataConFermate> createState() =>
+      _CardLineaSalvataConFermateState();
+}
+
+class _CardLineaSalvataConFermateState
+    extends State<_CardLineaSalvataConFermate> {
+  bool _expanded = true;
+  int _dirIndex = 0;
+  bool _loading = false;
+  final _filtroFermate = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _caricaFermateSeNecessario();
+  }
+
+  @override
+  void dispose() {
+    _filtroFermate.dispose();
+    super.dispose();
+  }
+
+  Future<void> _caricaFermateSeNecessario() async {
+    final status = widget.repo.statusOf(widget.line.routeId);
+    if (status == null || status.allShapes.isEmpty) {
+      if (mounted) setState(() => _loading = true);
+      await widget.repo.loadLine(widget.line);
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colori = StatusColors.of(context);
+    final status = widget.repo.statusOf(widget.line.routeId);
+    final parti = DisplayNames.routeParts(widget.line.longName ?? '');
+    final isDeviata = status != null && status.activeReports.isNotEmpty;
+    final isRegolare = status != null && status.activeReports.isEmpty;
+    final skippedStops = status?.allSkippedStops ?? const [];
+    final skippedIds = {for (final s in skippedStops) s.stop.id};
+
+    final shapes = status != null && status.allShapes.isNotEmpty
+        ? status.allShapes
+        : (status?.shape != null
+            ? [status!.shape, if (status.shapeReturn != null) status.shapeReturn!]
+            : const <RouteShape>[]);
+
+    final shapeCorrente = shapes.isNotEmpty
+        ? shapes[_dirIndex.clamp(0, shapes.length - 1)]
+        : null;
+
+    final tutteFermate = shapeCorrente?.stops ?? const <TransitStop>[];
+    final q = _filtroFermate.text.trim().toLowerCase();
+    final fermateFiltrate = q.isEmpty
+        ? tutteFermate
+        : tutteFermate.where((f) {
+            return f.name.toLowerCase().contains(q) ||
+                (f.code != null && f.code!.contains(q));
+          }).toList();
+
+    final isWatching = widget.repo.isWatching(widget.line.routeId);
+    final watchTracks = isWatching ? widget.repo.liveTracks : const <VehicleTrack>[];
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+      elevation: 0,
+      color: isDeviata
+          ? scheme.errorContainer.withValues(alpha: 0.35)
+          : scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: isDeviata
+            ? BorderSide(color: scheme.error, width: 1.5)
+            : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Intestazione linea
+            Row(
+              children: [
+                LineBadge(line: widget.line, height: 32),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        parti.route,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (parti.qualifier != null)
+                        Text(
+                          parti.qualifier!,
+                          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                  tooltip: _expanded ? 'Comprimi fermate' : 'Espandi fermate',
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Stato deviazione linea
+            if (isDeviata)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 16, color: scheme.onErrorContainer),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'ATTENZIONE: LINEA DEVIATA${skippedStops.isNotEmpty ? " (salta ${skippedStops.length} fermate)" : ""}',
+                        style: TextStyle(
+                          color: scheme.onErrorContainer,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (isRegolare)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: colori.ok.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 16, color: colori.ok),
+                    const SizedBox(width: 6),
+                    Text(
+                      'REGOLARE · Nessuna deviazione attiva',
+                      style: TextStyle(
+                        color: colori.ok,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Pulsanti veloci Mappa e Live
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: widget.onApriMappa,
+                  icon: const Icon(Icons.map_outlined, size: 16),
+                  label: const Text('Mappa'),
+                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    if (!isWatching) {
+                      widget.repo.startWatch(widget.line);
+                    }
+                    widget.onApriMappa();
+                  },
+                  icon: Icon(
+                    Icons.sensors,
+                    size: 16,
+                    color: isWatching ? const Color(0xFF00E676) : null,
+                  ),
+                  label: Text(isWatching ? 'Live (${watchTracks.length})' : 'Radar live'),
+                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.star, color: Colors.amber),
+                  tooltip: 'Rimuovi dai preferiti',
+                  onPressed: () => widget.repo.removeLine(widget.line),
+                ),
+              ],
+            ),
+
+            // CONTENUTO ESPANSO: FERMATE CLICCABILI
+            if (_expanded) ...[
+              const Divider(height: 20),
+              if (_loading && shapes.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(strokeWidth: 2),
+                        SizedBox(width: 12),
+                        Text('Caricamento fermate della linea…'),
+                      ],
+                    ),
+                  ),
+                )
+              else if (shapes.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Nessun percorso registrato per questa linea.',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+                  ),
+                )
+              else ...[
+                // Selettore direzione
+                if (shapes.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: SegmentedButton<int>(
+                      segments: [
+                        for (var i = 0; i < shapes.length; i++)
+                          ButtonSegment<int>(
+                            value: i,
+                            label: Text(
+                              'verso ${DisplayNames.direction(shapes[i].headsign, longName: widget.line.longName)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      selected: {_dirIndex},
+                      onSelectionChanged: (val) => setState(() => _dirIndex = val.first),
+                    ),
+                  ),
+
+                // Filtro rapido fermata
+                if (tutteFermate.length > 8)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TextField(
+                      controller: _filtroFermate,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Cerca fermata per nome o palina…',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        suffixIcon: _filtroFermate.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                onPressed: () => setState(() => _filtroFermate.clear()),
+                              )
+                            : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+
+                // Suggerimento clic
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.touch_app_outlined, size: 14, color: scheme.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tocca una fermata per gli orari in tempo reale:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Elenco fermate ordinato
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 340),
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+                  ),
+                  child: fermateFiltrate.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: Text('Nessuna fermata corrispondente')),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: fermateFiltrate.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1, indent: 40),
+                          itemBuilder: (context, i) {
+                            final f = fermateFiltrate[i];
+                            final isSkipped = skippedIds.contains(f.id);
+
+                            return ListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              leading: CircleAvatar(
+                                radius: 11,
+                                backgroundColor: isSkipped
+                                    ? scheme.errorContainer
+                                    : scheme.surfaceContainerHighest,
+                                child: Text(
+                                  '${i + 1}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSkipped ? scheme.error : scheme.onSurface,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                DisplayNames.stop(f),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: isSkipped ? scheme.error : null,
+                                  decoration: isSkipped ? TextDecoration.lineThrough : null,
+                                ),
+                              ),
+                              subtitle: Row(
+                                children: [
+                                  if (f.code != null && f.code!.isNotEmpty)
+                                    Text(
+                                      'Palina ${f.code}',
+                                      style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                                    ),
+                                  if (isSkipped) ...[
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '⚠️ Saltata per deviazione',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: scheme.error,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              trailing: Icon(
+                                Icons.departure_board_outlined,
+                                size: 18,
+                                color: scheme.primary,
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => StopScreen(stop: f, repo: widget.repo),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OrariFermateLineaSheet extends StatefulWidget {
