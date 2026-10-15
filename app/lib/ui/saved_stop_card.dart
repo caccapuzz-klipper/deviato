@@ -89,6 +89,7 @@ class SavedStopRow extends StatelessWidget {
     required this.line,
     required this.checking,
     required this.onTap,
+    this.onOpenArrivals,
     super.key,
   });
 
@@ -96,6 +97,7 @@ class SavedStopRow extends StatelessWidget {
   final TransitLine line;
   final bool checking;
   final VoidCallback onTap;
+  final VoidCallback? onOpenArrivals;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +237,16 @@ class SavedStopRow extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onOpenArrivals != null)
+                IconButton(
+                  icon: Icon(
+                    Icons.departure_board_outlined,
+                    color: scheme.primary,
+                    size: 22,
+                  ),
+                  tooltip: 'Arrivi in tempo reale',
+                  onPressed: onOpenArrivals,
+                ),
             ],
           ),
         ),

@@ -7,6 +7,7 @@ import '../core/text/display_names.dart';
 import '../core/models/saved_stop.dart';
 import '../data/app_repository.dart';
 import 'line_badge.dart';
+import 'stop_screen.dart';
 import 'theme.dart';
 
 /// Apre la ricerca delle linee, sopra la schermata da cui la si chiama.
@@ -356,6 +357,25 @@ class _LinePickerState extends State<LinePicker> {
                 ),
               ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: FilledButton.tonalIcon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => StopScreen(
+                    stop: f.stop,
+                    repo: repo,
+                    fermataCercabile: f,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.departure_board),
+            label: const Text('Orari e arrivi in tempo reale'),
           ),
         ),
         Padding(

@@ -38,10 +38,11 @@ class InfoScreen extends StatelessWidget {
           ),
           const _Sezione('Da dove vengono i dati'),
           const _Paragrafo(
-            'Avvisi, percorsi, fermate e posizioni dei mezzi sono dati '
-            'aperti di GTT. Gli avvisi vengono letti ogni mezz\'ora durante '
-            'il giorno per ricavarne i percorsi deviati e le fermate non '
-            'servite.',
+            'Avvisi, percorsi, fermate, orari e posizioni dei mezzi sono dati '
+            'aperti di GTT (licenza CC BY 4.0). Gli avvisi vengono elaborati '
+            'per ricavarne i percorsi deviati e le fermate non servite. '
+            'Il calendario scioperi è tratto dalle proclamazioni ufficiali '
+            'del Ministero delle Infrastrutture e dei Trasporti.',
           ),
           _Collegamento(
             icona: Icons.directions_bus_outlined,
@@ -49,6 +50,13 @@ class InfoScreen extends StatelessWidget {
             dettaglio: 'www.gtt.to.it',
             indirizzo: 'https://www.gtt.to.it',
             seNonSiApre: 'Impossibile aprire il sito di GTT.',
+          ),
+          _Collegamento(
+            icona: Icons.campaign_outlined,
+            titolo: 'Calendario scioperi MIT',
+            dettaglio: 'scioperi.mit.gov.it',
+            indirizzo: 'https://scioperi.mit.gov.it/mit2/public/scioperi',
+            seNonSiApre: 'Impossibile aprire il calendario MIT.',
           ),
           if (generato != null || feed != null)
             Padding(

@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../core/config.dart';
+import '../core/geo/projection.dart';
 import '../core/models/saved_stop.dart';
 import '../core/models/transit.dart';
+import '../core/sources/scioperi_mit.dart';
+import '../core/pipeline/arrivi_fermata.dart';
+import '../core/pipeline/stop_search.dart';
+import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
+import '../data/user_location.dart';
+import 'info_screen.dart';
+import 'line_badge.dart';
 import 'line_picker.dart';
 import 'line_screen.dart';
 import 'line_tile.dart';
 import 'logo.dart';
 import 'saved_stop_card.dart';
-import 'info_screen.dart';
+import 'stop_screen.dart';
 
 /// La home: le fermate che usi, e sotto le linee.
 ///
@@ -31,6 +41,11 @@ class HomeScreen extends StatelessWidget {
           appBar: AppBar(
             title: const DeviatoLogo(),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.near_me_outlined),
+                tooltip: 'Fermate vicine',
+                onPressed: () => _mostraFermateVicine(context),
+              ),
               IconButton(
                 icon: const Icon(Icons.add),
                 tooltip: 'Aggiungi una linea',
@@ -111,6 +126,9 @@ class HomeScreen extends StatelessWidget {
           if (repo.error != null)
             _ErrorBanner(message: repo.error!, onClose: repo.clearError),
 
+          if (repo.scioperoInArrivo case final sciopero?)
+            _ScioperoBanner(sciopero: sciopero, repo: repo),
+
           if (fermate.isNotEmpty) ...[
             const _SectionTitle('Le tue fermate'),
             for (final e in perLinea.entries)
@@ -174,6 +192,19 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  void _mostraFermateVicine(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: _FermateVicineSheet(repo: repo),
+      ),
+    );
+  }
+
   Widget? _fermata(
     BuildContext context,
     SavedStop s,
@@ -203,6 +234,21 @@ class HomeScreen extends StatelessWidget {
         onTap: repo.statusOf(line.routeId) == null
             ? () => repo.refreshLine(line)
             : () => _apri(context, line, stopId: s.stopId),
+        onOpenArrivals: () {
+          final stop = risposta.stop ??
+              TransitStop(
+                id: s.stopId,
+                name: 'Fermata ${s.stopCode ?? s.stopId}',
+                code: s.stopCode,
+                position: const GeoPoint(45.07, 7.68),
+              );
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => StopScreen(stop: stop, repo: repo),
+            ),
+          );
+        },
       ),
     );
   }
@@ -563,6 +609,602 @@ class _Message extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FermateVicineSheet extends StatefulWidget {
+  const _FermateVicineSheet({required this.repo});
+
+  final AppRepository repo;
+
+  @override
+  State<_FermateVicineSheet> createState() => _FermateVicineSheetState();
+}
+
+class _FermateVicineSheetState extends State<_FermateVicineSheet> {
+  bool _loading = true;
+  String? _errore;
+  List<FermataConDistanza> _fermate = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _localizzaECarica();
+  }
+
+  Future<void> _localizzaECarica() async {
+    setState(() {
+      _loading = true;
+      _errore = null;
+    });
+
+    final loc = UserLocation();
+    final denial = await loc.ensurePermission();
+    if (denial != null) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errore = UserLocation.explain(denial);
+      });
+      return;
+    }
+
+    final pos = await loc.current();
+    if (pos == null) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errore =
+            'Posizione non disponibile. Verifica che il GPS sia attivo e riprova.';
+      });
+      return;
+    }
+
+    if (widget.repo.fermateRete == null) {
+      await widget.repo.caricaFermate();
+    }
+
+    final indice = widget.repo.fermateRete;
+    if (indice == null) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errore = 'Indice fermate non disponibile. Verifica la connessione.';
+      });
+      return;
+    }
+
+    final vicine = ArriviFermataHelper.fermateVicine(
+      indice,
+      userLat: pos.lat,
+      userLon: pos.lon,
+      max: 30,
+      raggioMetri: 1500,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _fermate = vicine;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(
+            children: [
+              Icon(Icons.near_me, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Fermate nelle vicinanze',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              if (!_loading)
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  tooltip: 'Ricalcola vicinanze',
+                  onPressed: _localizzaECarica,
+                ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: _buildContent(theme),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent(ThemeData theme) {
+    if (_loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Rilevamento posizione e fermate vicine…'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_errore != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.location_off_outlined,
+                  size: 48, color: theme.colorScheme.error),
+              const SizedBox(height: 16),
+              Text(
+                _errore!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _localizzaECarica,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Riprova'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_fermate.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.explore_off_outlined,
+                  size: 48, color: theme.colorScheme.outline),
+              const SizedBox(height: 16),
+              Text(
+                'Nessuna fermata GTT trovata entro 1,5 km.',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final byId = {for (final l in widget.repo.allLines) l.routeId: l};
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _fermate.length,
+      separatorBuilder: (_, __) => const Divider(height: 1, indent: 64),
+      itemBuilder: (context, i) {
+        final item = _fermate[i];
+        final f = item.fermata;
+        final nome = DisplayNames.stop(f.stop);
+        final linee = [
+          for (final p in f.passaggi)
+            if (byId.containsKey(p.routeId)) byId[p.routeId]!,
+        ];
+
+        return ListTile(
+          leading: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              item.distanzaFormattata,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          title: Text(nome, style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (f.stop.code != null)
+                Text('Palina ${f.stop.code}'),
+              if (linee.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      for (final l in linee.take(6))
+                        LineBadge(line: l, height: 20),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => StopScreen(
+                  stop: f.stop,
+                  repo: widget.repo,
+                  fermataCercabile: f,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _ScioperoBanner extends StatelessWidget {
+  const _ScioperoBanner({required this.sciopero, required this.repo});
+
+  final Sciopero sciopero;
+  final AppRepository repo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isOggi = _isStessoGiorno(sciopero.inizio, DateTime.now()) ||
+        (DateTime.now().isAfter(sciopero.inizio) &&
+            DateTime.now().isBefore(sciopero.fine.add(const Duration(days: 1))));
+
+    final titolo = isOggi
+        ? 'Sciopero dei trasporti OGGI'
+        : 'Sciopero dei trasporti in arrivo';
+
+    final dataStr = _formattaDate(sciopero.inizio, sciopero.fine);
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      color: theme.colorScheme.errorContainer,
+      elevation: 0,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _mostraDettaglioSciopero(context, sciopero, repo.scioperi),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: theme.colorScheme.onErrorContainer,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            titolo,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onErrorContainer,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.error,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            dataStr,
+                            style: TextStyle(
+                              color: theme.colorScheme.onError,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      sciopero.modalita.isNotEmpty
+                          ? '${sciopero.sindacati}: ${sciopero.modalita}'
+                          : sciopero.sindacati,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onErrorContainer,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          'Tocca per fasce orarie e dettagli',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 11,
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static bool _isStessoGiorno(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  static String _formattaDate(DateTime inizio, DateTime fine) {
+    if (_isStessoGiorno(inizio, fine)) {
+      return '${inizio.day}/${inizio.month}';
+    }
+    return '${inizio.day}/${inizio.month} - ${fine.day}/${fine.month}';
+  }
+
+  static void _mostraDettaglioSciopero(
+    BuildContext context,
+    Sciopero sciopero,
+    List<Sciopero> tuttiScioperi,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: _ScioperoDettaglioSheet(
+          sciopero: sciopero,
+          tuttiScioperi: tuttiScioperi,
+        ),
+      ),
+    );
+  }
+}
+
+class _ScioperoDettaglioSheet extends StatelessWidget {
+  const _ScioperoDettaglioSheet({
+    required this.sciopero,
+    required this.tuttiScioperi,
+  });
+
+  final Sciopero sciopero;
+  final List<Sciopero> tuttiScioperi;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
+    final altriScioperi = tuttiScioperi
+        .where((s) => s != sciopero && s.fine.isAfter(DateTime.now()))
+        .toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      children: [
+        Row(
+          children: [
+            Icon(Icons.campaign, color: theme.colorScheme.error, size: 28),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Sciopero Trasporti',
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          color: theme.colorScheme.errorContainer.withOpacity(0.5),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _dettaglioVoce(
+                  'Data',
+                  sciopero.inizio.day == sciopero.fine.day
+                      ? '${sciopero.inizio.day}/${sciopero.inizio.month}/${sciopero.inizio.year}'
+                      : 'Dal ${sciopero.inizio.day}/${sciopero.inizio.month} al ${sciopero.fine.day}/${sciopero.fine.month}/${sciopero.fine.year}',
+                  theme,
+                  evidenziato: true,
+                ),
+                const SizedBox(height: 10),
+                _dettaglioVoce(
+                  'Sindacati proclamanti',
+                  sciopero.sindacati,
+                  theme,
+                ),
+                const SizedBox(height: 10),
+                _dettaglioVoce(
+                  'Modalità e orari',
+                  sciopero.modalita.isNotEmpty ? sciopero.modalita : 'Non specificata',
+                  theme,
+                  evidenziato: true,
+                ),
+                if (sciopero.categoria.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _dettaglioVoce('Categoria', sciopero.categoria, theme),
+                ],
+                if (sciopero.note.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _dettaglioVoce('Fasce / Note MIT', sciopero.note, theme),
+                ],
+                const SizedBox(height: 10),
+                _dettaglioVoce(
+                  'Rilevanza',
+                  sciopero.rilevanza.isNotEmpty ? sciopero.rilevanza : 'TPL',
+                  theme,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        ListTile(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+          leading: const Icon(Icons.open_in_new),
+          title: const Text('Verifica sul calendario ufficiale MIT'),
+          subtitle: const Text('scioperi.mit.gov.it'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            try {
+              await launchUrl(
+                Uri.parse(GttConfig.scioperiMitUrl),
+                mode: LaunchMode.externalApplication,
+              );
+            } catch (_) {}
+          },
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            'Nota: i dati provengono dalla Commissione di Garanzia Scioperi / MIT. '
+            'Le fasce di garanzia garantite da GTT (solitamente 6:00-9:00 e 12:00-15:00) '
+            'e le corse effettivamente cancellate dipendono dall\'adesione del personale. '
+            'Verifica sempre gli aggiornamenti su www.gtt.to.it prima di viaggiare.',
+            style: textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (altriScioperi.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(
+            'Altri scioperi programmati',
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final s in altriScioperi)
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              elevation: 0,
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${s.inizio.day}/${s.inizio.month}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  s.sindacati,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                subtitle: Text(
+                  s.modalita.isNotEmpty ? s.modalita : s.settore,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: Text(
+                  s.rilevanza,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _dettaglioVoce(
+    String etichetta,
+    String valore,
+    ThemeData theme, {
+    bool evidenziato = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          etichetta.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          valore,
+          style: TextStyle(
+            fontSize: evidenziato ? 15 : 13,
+            fontWeight: evidenziato ? FontWeight.bold : FontWeight.normal,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+      ],
     );
   }
 }

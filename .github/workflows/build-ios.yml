@@ -1,0 +1,44 @@
+name: Compila iOS (.ipa non firmato)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Installa dipendenze
+        working-directory: app
+        run: flutter pub get
+
+      - name: Compila iOS Release (no codesign)
+        working-directory: app
+        run: flutter build ios --release --no-codesign
+
+      - name: Impacchetta .ipa non firmato
+        working-directory: app/build/ios/iphoneos
+        run: |
+          mkdir Payload
+          cp -R Runner.app Payload/
+          zip -r -9 Deviato-unsigned.ipa Payload
+
+      - name: Carica Artifact .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Deviato-unsigned-ipa
+          path: app/build/ios/iphoneos/Deviato-unsigned.ipa
+          retention-days: 14

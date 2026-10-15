@@ -232,10 +232,14 @@ Non sono stime. Se li rimetti in discussione, rimisurali.
 | Rientro non nominato negli avvisi | **24 su 28** | fixture annotate |
 | Rientro — ultima via nominata, distanza dal percorso | mediana **10 m**, 32/50 ≤ 100 m | `check_rejoin_live.dart` |
 | Rientro — casi rifiutati dalla guardia dei 300 m | **9 su 50** (18%) | idem |
+| API 5T transiti fermate | **410 Gone** (dismessa) | `5t.torino.it/ws2.1/rest/stops` |
+| GTFS-RT `trip_update.aspx` | **100% trip_id**, ma **0% route_id** e **0% stop_id** | misura feed Protobuf GTT |
+| CMS GTT transiti per palina | JSON (~1,5 KB), passaggi RT e pianificati | `palina.getTransitiOld` |
+| Scioperi MIT (`/mit2/public/scioperi`) | Tabella HTML 10 colonne (filtro GTT/TPL) | `scioperi.mit.gov.it` |
 
 ## 4. Dove la specifica sbaglia
 
-Il documento in `docs/` è il progetto originale. **Sette punti sono stati
+Il documento in `docs/` è il progetto originale. **Nove punti sono stati
 smentiti dalle misure.** Non "adattati": smentiti.
 
 1. **L'OTP di GTT non va messo al centro.** È un build più vecchio: i suoi
@@ -258,6 +262,15 @@ smentiti dalle misure.** Non "adattati": smentiti.
 7. **"Non più lungo di 3× la linea d'aria" non regge sugli anelli.** La 2C
    fa 4,3 km per 0,8 km in linea d'aria. Si confronta col **tratto di
    percorso che sostituisce**.
+8. **"GTFS-RT trip_update.aspx per gli arrivi alla fermata" non è praticabile direttamente dal client.**
+   Il feed di GTT non valorizza né `route_id` né `stop_id`: fornisce solo `trip_id`
+   e `stop_sequence`. Risolverlo su un'app mobile richiederebbe di scaricare
+   e unire in memoria l'intero `stop_times.txt` (decine di megabyte, centinaia
+   di migliaia di record), impattando batteria e memoria. L'endpoint ufficiale
+   e leggero usato dal portale GTT e dal bot Telegram è `task=palina.getTransitiOld`,
+   che restituisce direttamente i passaggi in tempo reale (`PassaggiRT`) e pianificati
+   (`PassaggiPR`) in meno di 2 KB di JSON per fermata.
+9. **L'API 5T `/ws2.1/rest/stops/{id}/departures` non esiste più.** Risponde `410 Gone`.
 
 ## 5. Trappole già pagate
 
@@ -653,6 +666,22 @@ Ognuna di queste è costata tempo. Sono tutte silenziose: non danno errore.
   26/09/2027**. L'intestazione `X-GitHub-Api-Version: 2022-11-28` è
   deprecata e smette di funzionare il 10/03/2028: al rinnovo del token va
   aggiornata. Gli orari di GitHub restano come riserva, ogni tre ore.
+- **Il feed GTFS-RT trip_update di GTT omette route_id e stop_id.** Chi aspetta
+  a una fermata non può filtrare il feed globale dei transiti senza scaricare e
+  joinare i 500+ MB di `stop_times.txt` in memoria. L'endpoint web CMS
+  `palina.getTransitiOld` risolve direttamente per palina sia i passaggi RT
+  che pianificati in meno di 2 KB, senza chiavi né overhead.
+- **Il portale scioperi MIT esplode con percorsi incompleti.** Chiamare
+  `/mit2/public/index.php` direttamente o con parametri errati causa un Fatal Error
+  PHP irreversibile lato server del Ministero (HTTP 500 non gestito). L'endpoint
+  HTTPS valido e stabile è `https://scioperi.mit.gov.it/mit2/public/scioperi`.
+- **Firma e distribuzione iOS senza Mac (.ipa unsigned in CI + Sideloadly).**
+  Senza Mac né account Apple Developer a pagamento, la build `.ipa` si compila su
+  runner GitHub Actions macOS (`macos-14`) con `flutter build ios --release --no-codesign`
+  e impacchettamento di `Runner.app` in `Payload/`. Il file `.ipa` non firmato viene
+  scaricato e firmato con un Apple ID gratuito su PC Windows tramite Sideloadly
+  (bundle identifier `it.caccapuzz.deviato`). La guida passo passo per gli amici
+  è documentata in `docs/DISTRIBUZIONE.md`.
 
 ## 6. Le regole di condotta del sistema
 
@@ -823,4 +852,4 @@ facendo gli screenshot troppo presto.
 
 ---
 
-*Ultimo aggiornamento: 4 ottobre 2026. 409 test.*
+*Ultimo aggiornamento: 15 ottobre 2026. Arrivi fermata in tempo reale, deviazioni integrate, scioperi MIT, build iOS CI e Sideloadly.*

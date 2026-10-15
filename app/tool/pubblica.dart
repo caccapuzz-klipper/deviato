@@ -46,6 +46,7 @@ import 'package:gtt_deviazioni/core/models/transit.dart';
 import 'package:gtt_deviazioni/core/publish/pubblicatore.dart';
 import 'package:gtt_deviazioni/core/ricostruzione/ricostruzione.dart';
 import 'package:gtt_deviazioni/core/sources/alerts_source.dart';
+import 'package:gtt_deviazioni/core/sources/scioperi_mit.dart';
 import 'package:gtt_deviazioni/core/sources/variazioni_source.dart';
 
 /// Il testo d'attribuzione che la licenza di GTT chiede.
@@ -174,6 +175,25 @@ Future<void> main(List<String> args) async {
       fonte: _fonte,
     ),
   );
+
+  // 6. Scioperi dei trasporti dal Ministero delle Infrastrutture e dei Trasporti.
+  try {
+    final scioperi = await ScioperiMitSource().fetchScioperi();
+    if (_scrivi(
+      uscita,
+      'stato/scioperi.json',
+      {
+        'aggiornato': DateTime.now().toIso8601String(),
+        'fonte': 'Ministero delle Infrastrutture e dei Trasporti (mit.gov.it)',
+        'scioperi': [for (final s in scioperi) s.toJson()],
+      },
+    )) {
+      scritti++;
+    }
+    _log('scioperi MIT: ${scioperi.length}');
+  } on Object catch (err) {
+    _log('::warning::Scioperi MIT non raggiungibili (${_breve(err)}).');
+  }
 
   _log('fatto in ${DateTime.now().difference(inizio).inSeconds} s: '
       '${giro.stati.length} linee, ${giro.avvisi} avvisi, '

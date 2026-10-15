@@ -10,6 +10,7 @@ import '../core/pipeline/line_resolver.dart';
 import '../core/pipeline/stop_answer.dart';
 import '../core/pipeline/stop_search.dart';
 import '../core/pipeline/vehicle_watch.dart';
+import '../core/sources/scioperi_mit.dart';
 import 'fonte_dati.dart';
 import 'settings.dart';
 
@@ -62,6 +63,13 @@ class AppRepository extends ChangeNotifier {
   bool offline = false;
 
   DateTime? get lastRefresh => generato;
+
+  /// Scioperi proclamati rilevati dal Ministero dei Trasporti.
+  List<Sciopero> scioperi = const [];
+
+  /// Sciopero proclamato attivo oggi o domani, se presente.
+  Sciopero? get scioperoInArrivo =>
+      scioperi.where((s) => s.isOggiODomani()).firstOrNull;
 
   /// Quando e' stato calcolato lo stato di [routeId]: l'ora del giro.
   DateTime? checkedAt(String routeId) =>
@@ -466,6 +474,18 @@ class AppRepository extends ChangeNotifier {
           if (s != null) stati[l.routeId] = s;
         }(),
     ]);
+
+    try {
+      final sj = await leggi('stato/scioperi.json') ??
+          (rete ? await _fonte.salvato('stato/scioperi.json') : null);
+      if (sj != null && sj['scioperi'] is List) {
+        scioperi = [
+          for (final raw in (sj['scioperi'] as List))
+            if (raw is Map<String, dynamic> && Sciopero.fromJson(raw) case final s?)
+              s,
+        ];
+      }
+    } catch (_) {}
 
     index = nuovo;
     _feed = i.feed;

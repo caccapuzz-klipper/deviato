@@ -183,4 +183,29 @@ void main() {
     await tester.tap(find.text('10N'));
     expect(aperta, isTrue);
   });
+
+  testWidgets('mostra il pulsante per gli arrivi se onOpenArrivals è fornito', (tester) async {
+    var chiamatiArrivi = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SavedStopRow(
+            answer: StopAnswer(
+              state: StopState.served,
+              saved: saved,
+              stop: giachino,
+              shape: shape,
+            ),
+            line: line,
+            checking: false,
+            onTap: () {},
+            onOpenArrivals: () => chiamatiArrivi = true,
+          ),
+        ),
+      ),
+    );
+    expect(find.byIcon(Icons.departure_board_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.departure_board_outlined));
+    expect(chiamatiArrivi, isTrue);
+  });
 }

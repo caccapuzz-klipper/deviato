@@ -17,6 +17,12 @@ class GttConfig {
       'https://percorsieorari.gtt.to.it/das_gtfsrt/alerts.aspx';
   static const vehiclesUrl =
       'https://percorsieorari.gtt.to.it/das_gtfsrt/vehicle_position.aspx';
+  static const tripUpdatesUrl =
+      'https://percorsieorari.gtt.to.it/das_gtfsrt/trip_update.aspx';
+  static const transitiPalinaUrl =
+      'https://www.gtt.to.it/cms/index.php?option=com_gtt&task=palina.getTransitiOld';
+  static const scioperiMitUrl =
+      'https://scioperi.mit.gov.it/mit2/public/scioperi';
   static const variazioniUrl = 'https://gtt.to.it/cms/variazioni';
 
   /// Geocoder OSM pubblico, nessuna chiave.
