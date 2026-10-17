@@ -11,7 +11,6 @@ import '../core/sources/scioperi_mit.dart';
 import '../core/pipeline/arrivi_fermata.dart';
 import '../core/pipeline/line_search.dart';
 import '../core/pipeline/stop_answer.dart';
-import '../core/pipeline/stop_search.dart';
 import '../core/pipeline/vehicle_watch.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
@@ -21,12 +20,12 @@ import 'journey_editor_screen.dart';
 import 'line_badge.dart';
 import 'line_picker.dart';
 import 'line_screen.dart';
-import 'line_tile.dart';
 import 'logo.dart';
 import 'saved_journey_screen.dart';
-import 'saved_stop_card.dart';
 import 'stop_screen.dart';
 import 'theme.dart';
+import 'package:flutter/cupertino.dart';
+import 'apple_theme.dart';
 
 /// La home: le fermate che usi, e sotto le linee.
 ///
@@ -270,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.info_outline),
+            leading: const Icon(Icons.help_outline),
             title: const Text('Informazioni & Note di rilascio'),
             onTap: () {
               Navigator.pop(context);
@@ -305,8 +304,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final lines = repo.lines;
-    final byId = {for (final l in lines) l.routeId: l};
+    final watchlist = repo.settings.watchlist.map((s) => s.toUpperCase()).toSet();
+    final lines = repo.lines
+        .where((l) =>
+            watchlist.contains(l.shortName.toUpperCase()) ||
+            watchlist.contains(l.routeId.toUpperCase()))
+        .toList();
+    final byId = {for (final l in repo.lines) l.routeId: l};
     final fermate = [
       for (final s in repo.savedStops)
         if (byId.containsKey(s.routeId)) s,
@@ -323,29 +327,32 @@ class _HomeScreenState extends State<HomeScreen> {
           if (repo.scioperoInArrivo case final sciopero?)
             _ScioperoBanner(sciopero: sciopero, repo: repo),
 
-          // Selettore sezioni cliccabile
+          // Selettore sezioni in stile iOS
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment<int>(
-                  value: 0,
-                  icon: Icon(Icons.star, size: 18),
-                  label: Text('Di interesse'),
-                ),
-                ButtonSegment<int>(
-                  value: 1,
-                  icon: Icon(Icons.directions_bus, size: 18),
-                  label: Text('Linee salvate'),
-                ),
-                ButtonSegment<int>(
-                  value: 2,
-                  icon: Icon(Icons.map_outlined, size: 18),
-                  label: Text('Tutte le linee'),
-                ),
-              ],
-              selected: {_sezione},
-              onSelectionChanged: (val) => setState(() => _sezione = val.first),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: CupertinoSlidingSegmentedControl<int>(
+                groupValue: _sezione,
+                backgroundColor: AppleColors.tertiarySystemGroupedBackground(context),
+                children: const {
+                  0: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Text('Di interesse', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  ),
+                  1: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Text('Linee salvate', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  ),
+                  2: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Text('Tutte le linee', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  ),
+                },
+                onValueChanged: (val) {
+                  if (val != null) setState(() => _sezione = val);
+                },
+              ),
             ),
           ),
 
@@ -366,88 +373,90 @@ class _HomeScreenState extends State<HomeScreen> {
     List<TransitLine> lines,
     Map<String, TransitLine> byId,
   ) {
-    final scheme = Theme.of(context).colorScheme;
-    final testo = Theme.of(context).textTheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Scheda in evidenza per inserimento rapido
-        Card(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          elevation: 0,
-          color: scheme.surfaceContainerHighest,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.star, color: Colors.amber[700], size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Linee e fermate di maggior interesse',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      Text(
-                        'Orari rapidi immediati senza percorso · Controllo deviazioni',
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                      ),
-                    ],
+        // Scheda in evidenza per inserimento rapido stile Apple
+        AppGroupedCard(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              const Icon(CupertinoIcons.star_fill, color: AppleColors.systemOrange, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Linee e fermate di maggior interesse',
+                      style: AppleTypography.headline(context).copyWith(fontSize: 15),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Orari immediati · Controllo deviazioni in tempo reale',
+                      style: AppleTypography.caption1(context),
+                    ),
+                  ],
+                ),
+              ),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                color: AppleColors.systemBlue.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                onPressed: () => showLinePicker(context, widget.repo),
+                child: const Text(
+                  'Inserisci',
+                  style: TextStyle(
+                    color: AppleColors.systemBlue,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                FilledButton.tonalIcon(
-                  onPressed: () => showLinePicker(context, widget.repo),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Inserisci'),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
 
         if (fermate.isEmpty && lines.isEmpty)
-          Card(
-            margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Icon(Icons.star_outline, size: 48, color: scheme.primary),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Nessun elemento di maggior interesse',
-                    style: testo.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
+          AppGroupedCard(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            child: Column(
+              children: [
+                const Icon(CupertinoIcons.square_stack_3d_up, size: 44, color: AppleColors.systemBlue),
+                const SizedBox(height: 12),
+                Text(
+                  'Aggiungi le tue linee',
+                  style: AppleTypography.headline(context).copyWith(fontSize: 17, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Scegli le linee o fermate che prendi di solito per consultare '
+                  'subito gli orari di arrivo in tempo reale e sapere se sono deviate o regolari.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppleColors.secondaryLabel(context), fontSize: 13, height: 1.3),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => showLinePicker(context, widget.repo),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Aggiungi una linea'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Inserisci le linee o fermate che prendi di solito per consultare '
-                    'subito gli orari di arrivo in tempo reale e sapere con attenzione '
-                    'se sono deviate o regolari.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: scheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () => showLinePicker(context, widget.repo),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Inserisci linea o fermata'),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
-        // Pagine di salvataggio percorsi con cambi
-        _sezionePercorsiSalvati(context),
-
         // Fermate di maggior interesse
         if (fermate.isNotEmpty) ...[
-          const _SectionTitle('Fermate di maggior interesse (Orari immediati)'),
+          const _SectionTitle('Le tue fermate'),
           for (var i = 0; i < fermate.length; i++)
             if (byId[fermate[i].routeId] case final l?)
               _schedaFermataInteresse(context, fermate[i], l, i),
@@ -464,6 +473,9 @@ class _HomeScreenState extends State<HomeScreen> {
           for (final line in lines)
             _schedaLineaInteresse(context, line),
         ],
+
+        // Pagine di salvataggio percorsi con cambi
+        _sezionePercorsiSalvati(context),
       ],
     );
   }
@@ -480,10 +492,13 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Pagine di salvataggio (Fino a 3 cambi)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              const Expanded(
+                child: Text(
+                  'Pagine di salvataggio (Fino a 3 cambi)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
               ),
+              const SizedBox(width: 8),
               FilledButton.tonalIcon(
                 onPressed: () {
                   Navigator.push(
@@ -720,8 +735,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final risposta = widget.repo.answerFor(s);
     if (risposta == null) return const SizedBox.shrink();
 
-    final scheme = Theme.of(context).colorScheme;
-    final colori = StatusColors.of(context);
     final stop = risposta.stop ??
         TransitStop(
           id: s.stopId,
@@ -748,240 +761,199 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.repo.unsaveStop(s);
         _conAnnulla(
           context,
-          'Fermata rimossa dai preferiti',
+          'Fermata rimossa',
           () => widget.repo.restoreSavedStop(s, posizione),
         );
       },
-      child: Card(
-        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        elevation: 0,
+      child: AppGroupedCard(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(14),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => StopScreen(stop: stop, repo: widget.repo),
+            ),
+          );
+        },
         color: isDeviata
-            ? scheme.errorContainer.withValues(alpha: 0.35)
-            : scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: isDeviata
-              ? BorderSide(color: scheme.error, width: 1.5)
-              : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () {
-            // Apre gli orari immediatamente senza percorso!
-            Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => StopScreen(stop: stop, repo: widget.repo),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
+            ? (Theme.of(context).brightness == Brightness.dark
+                ? const Color(0x1FFF453A)
+                : const Color(0x0FFF3B30))
+            : AppleColors.secondarySystemGroupedBackground(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    LineBadge(line: line, height: 26),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: DisplayNames.stop(stop),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                if (stop.code != null)
-                                  TextSpan(
-                                    text: ' · Palina ${stop.code}',
-                                    style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.normal,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (verso != null)
-                            Text(
-                              'verso $verso',
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
+                LineBadge(line: line, height: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DisplayNames.stop(stop),
+                        style: AppleTypography.headline(context).copyWith(fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // ATTENZIONE: STATO DEVIAZIONE O REGOLARE
-                if (isDeviata)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: scheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.warning_amber_rounded,
-                              size: 16,
-                              color: scheme.onErrorContainer,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'ATTENZIONE: FERMATA NON SERVITA (DEVIATA)',
-                                style: TextStyle(
-                                  color: scheme.onErrorContainer,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
+                      if (stop.code != null || verso != null)
+                        Text(
+                          [
+                            if (stop.code != null) 'Palina ${stop.code}',
+                            if (verso != null) 'verso $verso',
+                          ].join(' · '),
+                          style: AppleTypography.caption1(context),
                         ),
-                        if (risposta.until != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2, left: 22),
-                            child: Text(
-                              'Fino al ${_data(risposta.until!)}',
-                              style: TextStyle(
-                                color: scheme.onErrorContainer,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        if (risposta.walkTo.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4, left: 22),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.directions_walk, size: 14),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    'Sali alla fermata ${DisplayNames.stop(risposta.walkTo.first.stop)} (${risposta.walkTo.first.stop.code ?? ""}) a circa ${risposta.walkTo.first.meters.round()}m',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  )
-                else if (isClosesLater)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: colori.warning.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.event_outlined, size: 16, color: colori.warning),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            risposta.from == null
-                                ? 'Servita, chiuderà a breve per deviazione'
-                                : 'Servita, chiuderà dal ${_data(risposta.from!)}',
-                            style: TextStyle(
-                              color: colori.warning,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else if (isServita)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: colori.ok.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle_outline, size: 16, color: colori.ok),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'REGOLARE · Fermata regolarmente servita',
-                            style: TextStyle(
-                              color: colori.ok,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-
-                const SizedBox(height: 8),
-                // Azioni: Orari immediati senza percorso o mappa
-                Row(
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) => StopScreen(stop: stop, repo: widget.repo),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.departure_board, size: 16),
-                      label: const Text('Orari in tempo reale'),
-                      style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.map_outlined, size: 20),
-                      tooltip: 'Vedi linea su mappa',
-                      onPressed: () => _apri(context, line, stopId: s.stopId),
-                    ),
-                  ],
+                ),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 14,
+                  color: AppleColors.secondaryLabel(context),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 8),
+
+            // Stato fermata
+            if (isDeviata)
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppleColors.systemRed,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Fermata non servita per deviazione',
+                      style: TextStyle(
+                        color: AppleColors.systemRed,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const StatusPill.alert('Non servita'),
+                ],
+              )
+            else if (isClosesLater)
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppleColors.systemOrange,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      risposta.from == null
+                          ? 'Servita, chiuderà a breve'
+                          : 'Chiuderà dal ${_data(risposta.from!)}',
+                      style: const TextStyle(
+                        color: AppleColors.systemOrange,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const StatusPill.warning('In chiusura'),
+                ],
+              )
+            else if (isServita)
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppleColors.systemGreen,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Servita regolarmente',
+                      style: TextStyle(
+                        color: AppleColors.systemGreen,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const StatusPill.success('Regolare'),
+                ],
+              ),
+
+            if (risposta.until != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 13),
+                child: Text(
+                  'Fino al ${_data(risposta.until!)}',
+                  style: AppleTypography.caption1(context),
+                ),
+              ),
+            if (risposta.walkTo.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 13),
+                child: Text(
+                  'Sali a: ${DisplayNames.stop(risposta.walkTo.first.stop)} (${risposta.walkTo.first.stop.code ?? ""}) a circa ${risposta.walkTo.first.meters.round()}m',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppleColors.secondaryLabel(context),
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => StopScreen(stop: stop, repo: widget.repo),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.departure_board, size: 16),
+                  label: const Text('Orari in tempo reale'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  tooltip: 'Vedi linea su mappa',
+                  onPressed: () => _apri(context, line, stopId: s.stopId),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _schedaLineaInteresse(BuildContext context, TransitLine line) {
-    final scheme = Theme.of(context).colorScheme;
-    final colori = StatusColors.of(context);
     final status = widget.repo.statusOf(line.routeId);
     final parti = DisplayNames.routeParts(line.longName ?? '');
     final isDeviata = status != null && status.activeReports.isNotEmpty;
@@ -1003,226 +975,206 @@ class _HomeScreenState extends State<HomeScreen> {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             _annullabile(
-              'Linea ${line.shortName} rimossa dai preferiti',
+              'Linea ${line.shortName} rimossa',
               () => widget.repo.restoreLine(tolta),
               lettore: lettore,
             ),
           );
       },
-      child: Card(
-        margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-        elevation: 0,
+      child: AppGroupedCard(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(14),
+        onTap: () => _apri(context, line),
         color: isDeviata
-            ? scheme.errorContainer.withValues(alpha: 0.35)
-            : scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: isDeviata
-              ? BorderSide(color: scheme.error, width: 1.5)
-              : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  LineBadge(line: line, height: 30),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          parti.route,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (parti.qualifier != null)
-                          Text(
-                            parti.qualifier!,
-                            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // ATTENZIONE: DEVIATA O REGOLARE
-              if (isDeviata)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: scheme.errorContainer,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+            ? (Theme.of(context).brightness == Brightness.dark
+                ? const Color(0x1FFF453A)
+                : const Color(0x0FFF3B30))
+            : AppleColors.secondarySystemGroupedBackground(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                LineBadge(line: line, height: 28),
+                const SizedBox(width: 10),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.warning_amber_rounded, size: 16, color: scheme.onErrorContainer),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'ATTENZIONE: LINEA DEVIATA${skippedStops.isNotEmpty ? " (salta ${skippedStops.length} fermate)" : ""}',
-                              style: TextStyle(
-                                color: scheme.onErrorContainer,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        parti.route,
+                        style: AppleTypography.headline(context).copyWith(fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (status.activeReports.isNotEmpty &&
-                          (status.activeReports.first.notice.headline ?? status.activeReports.first.notice.text).isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2, left: 22),
-                          child: Text(
-                            status.activeReports.first.notice.headline ?? status.activeReports.first.notice.text,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: scheme.onErrorContainer, fontSize: 12),
-                          ),
+                      if (parti.qualifier != null)
+                        Text(
+                          parti.qualifier!,
+                          style: AppleTypography.caption1(context),
                         ),
-                      if (skippedStops.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, left: 22),
-                          child: Text(
-                            'Fermate saltate: ${skippedStops.take(4).map((s) => s.stop.name).join(", ")}${skippedStops.length > 4 ? "…" : ""}',
-                            style: TextStyle(
-                              color: scheme.onErrorContainer,
-                              fontSize: 11,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                )
-              else if (isRegolare)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: colori.ok.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle_outline, size: 16, color: colori.ok),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'REGOLARE · Percorso regolare',
-                          style: TextStyle(
-                            color: colori.ok,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 14,
+                  color: AppleColors.secondaryLabel(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
 
-              // Banner tracking attivo
-              if (isWatching)
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            // Stato fermate / deviazione
+            if (isDeviata)
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppleColors.systemRed,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      skippedStops.isEmpty
+                          ? 'Avviso in corso'
+                          : (skippedStops.length == 1
+                              ? '1 fermata non servita'
+                              : '${skippedStops.length} fermate non servite'),
+                      style: const TextStyle(
+                        color: AppleColors.systemRed,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  if (skippedStops.isNotEmpty)
+                    StatusPill.alert(
+                      '${skippedStops.length} non ${skippedStops.length == 1 ? "servita" : "servite"}',
+                    ),
+                ],
+              )
+            else if (isRegolare)
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppleColors.systemGreen,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Percorso regolare',
+                      style: TextStyle(
+                        color: AppleColors.systemGreen,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const StatusPill.success('Regolare'),
+                ],
+              ),
+
+            if (status != null &&
+                status.activeReports.isNotEmpty &&
+                (status.activeReports.first.notice.headline ?? status.activeReports.first.notice.text).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 13),
+                child: Text(
+                  status.activeReports.first.notice.headline ?? status.activeReports.first.notice.text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppleColors.secondaryLabel(context),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+
+            if (isWatching)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(10),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0x331C1C1E)
+                        : const Color(0x14000000),
+                    borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 7,
+                        height: 7,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF00E676),
                           shape: BoxShape.circle,
+                          color: AppleColors.systemGreen,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          watchTracks.isEmpty
-                              ? 'Tracking live: ricerca bus in corso…'
-                              : 'Live: ${watchTracks.length} ${watchTracks.length == 1 ? "bus" : "bus"} in tempo reale',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => _apri(context, line),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          foregroundColor: const Color(0xFFF9D400),
-                        ),
-                        child: const Text('Mappa'),
+                      const SizedBox(width: 6),
+                      Text(
+                        watchTracks.isEmpty
+                            ? 'Ricerca bus…'
+                            : '${watchTracks.length} bus in tempo reale',
+                        style: AppleTypography.footnote(context),
                       ),
                     ],
                   ),
                 ),
-
-              const SizedBox(height: 10),
-              // AZIONI: ORARI SENZA PERCORSO, TRACCIA BUS LIVE, MAPPA
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: () => _mostraOrariFermateLinea(context, line, status),
-                    icon: const Icon(Icons.departure_board, size: 16),
-                    label: const Text('Orari fermate'),
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: () {
-                      if (!isWatching) {
-                        widget.repo.startWatch(line);
-                      }
-                      _apri(context, line);
-                    },
-                    icon: Icon(
-                      Icons.sensors,
-                      size: 16,
-                      color: isWatching ? const Color(0xFF00E676) : null,
-                    ),
-                    label: Text(
-                      isWatching
-                          ? 'Mezzi live (${watchTracks.length})'
-                          : 'Traccia bus live',
-                    ),
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _apri(context, line),
-                    icon: const Icon(Icons.map_outlined, size: 16),
-                    label: const Text('Mappa'),
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
               ),
-            ],
-          ),
+
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => _mostraOrariFermateLinea(context, line, status),
+                  icon: const Icon(Icons.departure_board, size: 16),
+                  label: const Text('Orari fermate'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    if (!isWatching) {
+                      widget.repo.startWatch(line);
+                    }
+                    _apri(context, line);
+                  },
+                  icon: Icon(
+                    isWatching ? Icons.sensors_off : Icons.sensors,
+                    size: 16,
+                  ),
+                  label: Text(isWatching ? 'Stop live' : 'Traccia live'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  tooltip: 'Mappa',
+                  onPressed: () => _apri(context, line),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -2205,62 +2157,6 @@ class _LinesHeader extends StatelessWidget {
       // «il 26/9» da solo non dice se sono dati del mattino o della sera.
       _ => 'Aggiornate il ${t.day}/${t.month} alle $h',
     };
-  }
-}
-
-/// Come si salva una fermata: una volta, finche' non la si chiude o se ne
-/// salva una.
-class _StopsHint extends StatelessWidget {
-  const _StopsHint({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      elevation: 0,
-      color: scheme.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.bookmark_add_outlined,
-              color: scheme.onSecondaryContainer,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Salva le tue fermate',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSecondaryContainer,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Apri una linea e tocca una fermata sulla mappa: qui '
-                    'vedrai subito se è servita.',
-                    style: TextStyle(color: scheme.onSecondaryContainer),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: Icon(Icons.close, color: scheme.onSecondaryContainer),
-              tooltip: 'Chiudi',
-              onPressed: onClose,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
