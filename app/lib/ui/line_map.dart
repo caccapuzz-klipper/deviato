@@ -18,7 +18,7 @@ import '../core/text/display_names.dart';
 import '../data/user_location.dart';
 import 'cartina.dart';
 import 'line_badge.dart';
-import 'theme.dart';
+import 'apple_theme.dart';
 
 /// Una fermata toccata sulla mappa, con il suo esito se non e' servita.
 typedef FermataScelta = ({TransitStop stop, StopImpact? impact});
@@ -579,64 +579,92 @@ class _LineMapState extends State<LineMap> {
           Positioned(
             top: widget.inset.top + 8,
             right: 8,
-            child: Material(
-              elevation: 4,
-              shadowColor: Colors.black26,
-              borderRadius: BorderRadius.circular(20),
-              color: widget.watching
-                  ? const Color(0xFF1E1E1E)
-                  : Theme.of(context).colorScheme.surface,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(20),
-                onTap: widget.onToggleWatch,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (widget.watching) ...[
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF00E676),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          widget.watchCount == 0
-                              ? 'Ricerca bus…'
-                              : '${widget.watchCount} bus live',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(
-                          Icons.stop_circle_outlined,
-                          size: 16,
-                          color: Colors.white70,
-                        ),
-                      ] else ...[
-                        Icon(
-                          Icons.sensors,
-                          size: 15,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Traccia bus live',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppleSizes.radiusPill),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: widget.watching
+                        ? (Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xCC1C1C1E)
+                            : const Color(0xE61C1C1E))
+                        : (Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xCC1C1C1E)
+                            : const Color(0xE6FFFFFF)),
+                    borderRadius: BorderRadius.circular(AppleSizes.radiusPill),
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0x33545458)
+                          : const Color(0x26000000),
+                      width: AppleSizes.hairline,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
                     ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusPill),
+                      onTap: widget.onToggleWatch,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.watching) ...[
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: AppleColors.systemGreen,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                widget.watchCount == 0
+                                    ? 'Ricerca bus…'
+                                    : '${widget.watchCount} bus live',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.stop_circle_outlined,
+                                size: 16,
+                                color: Colors.white70,
+                              ),
+                            ] else ...[
+                              const Icon(
+                                Icons.sensors,
+                                size: 15,
+                                color: AppleColors.systemBlue,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Traccia bus live',
+                                style: TextStyle(
+                                  color: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -645,14 +673,36 @@ class _LineMapState extends State<LineMap> {
         if (widget.fullScreen)
           widget.scheda?.call(context, _comandiInRiga()) ??
               Positioned(
-                left: 10,
-                right: 10,
-                bottom: 10 + widget.inset.bottom,
-                child: Material(
-                  color: Theme.of(context).colorScheme.surface,
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(22),
-                  child: _comandiInRiga(),
+                left: 12,
+                right: 12,
+                bottom: 12 + widget.inset.bottom,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppleSizes.radiusLg),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xCC1C1C1E)
+                            : const Color(0xE6FFFFFF),
+                        borderRadius: BorderRadius.circular(AppleSizes.radiusLg),
+                        border: Border.all(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0x33545458)
+                              : const Color(0x26000000),
+                          width: AppleSizes.hairline,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 10,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: _comandiInRiga(),
+                    ),
+                  ),
                 ),
               )
         else
@@ -772,11 +822,8 @@ class _LineMapState extends State<LineMap> {
     final palinaColor = isSkipped
         ? cartina.chiusa
         : (direzione == null
-            ? const Color(0xFF1976D2)
+            ? AppleColors.systemBlue
             : cartina.direzione(direzione));
-
-    final signWidth = selected ? 30.0 : 24.0;
-    final signHeight = selected ? 26.0 : 20.0;
 
     return Marker(
       point: LatLng(stop.position.lat, stop.position.lon),
@@ -790,60 +837,43 @@ class _LineMapState extends State<LineMap> {
         }),
         behavior: HitTestBehavior.opaque,
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              Container(
-                width: signWidth,
-                height: signHeight,
-                decoration: BoxDecoration(
-                  color: palinaColor,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: selected ? const Color(0xFFF9D400) : Colors.white,
-                    width: selected ? 2.5 : 1.5,
+              if (selected)
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: palinaColor.withValues(alpha: 0.25),
                   ),
-                  boxShadow: [
+                ),
+              Container(
+                width: selected ? 14 : 9,
+                height: selected ? 14 : 9,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSkipped
+                      ? AppleColors.systemRed
+                      : (selected ? palinaColor : Colors.white),
+                  border: Border.all(
+                    color: isSkipped
+                        ? Colors.white
+                        : (selected ? Colors.white : palinaColor),
+                    width: selected ? 2.5 : 2.0,
+                  ),
+                  boxShadow: const [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.35),
-                      blurRadius: 3,
-                      offset: const Offset(0, 1),
+                      color: Color(0x33000000),
+                      blurRadius: 2,
+                      offset: Offset(0, 1),
                     ),
                   ],
                 ),
-                child: Center(
-                  child: isSkipped
-                      ? const Icon(Icons.close, size: 14, color: Colors.white)
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.directions_bus,
-                              size: 11,
-                              color: Colors.white,
-                            ),
-                            if (selected && stop.code != null) ...[
-                              const SizedBox(width: 2),
-                              Text(
-                                stop.code!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                ),
-              ),
-              Container(
-                width: 2.5,
-                height: selected ? 6 : 4,
-                color: selected
-                    ? const Color(0xFFF9D400)
-                    : (cartina.scura ? Colors.white70 : Colors.black87),
+                child: isSkipped
+                    ? const Icon(Icons.close, size: 8, color: Colors.white)
+                    : null,
               ),
             ],
           ),
@@ -1038,19 +1068,28 @@ class FermataToccata extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final skipped = impact != null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = skipped
+        ? (isDark ? const Color(0x29FF453A) : const Color(0x14FF3B30))
+        : AppleColors.secondarySystemGroupedBackground(context);
+    final borderColor = skipped
+        ? (isDark ? const Color(0x4DFF453A) : const Color(0x33FF3B30))
+        : AppleColors.separator(context);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       decoration: BoxDecoration(
-        color: skipped
-            ? scheme.errorContainer.withOpacity(0.55)
-            : scheme.surfaceContainerHighest.withOpacity(0.6),
+        color: bg,
         border: Border(
           top: BorderSide(
-            color: skipped ? scheme.error : scheme.primary,
-            width: 2,
+            color: borderColor,
+            width: AppleSizes.hairline,
+          ),
+          bottom: BorderSide(
+            color: AppleColors.separator(context),
+            width: AppleSizes.hairline,
           ),
         ),
       ),
@@ -1062,86 +1101,106 @@ class FermataToccata extends StatelessWidget {
             children: [
               Icon(
                 skipped
-                    ? Icons.do_not_disturb_on_outlined
-                    : Icons.signpost_outlined,
+                    ? Icons.remove_circle_outline
+                    : Icons.location_on_outlined,
                 size: 20,
-                color: skipped ? scheme.error : scheme.primary,
+                color: skipped ? AppleColors.systemRed : AppleColors.systemBlue,
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: DisplayNames.stop(stop),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    Text(
+                      DisplayNames.stop(stop),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    if (stop.code != null)
+                      Text(
+                        '(Palina ${stop.code})',
+                        style: TextStyle(
+                          color: AppleColors.secondaryLabel(context),
+                          fontWeight: FontWeight.normal,
+                          fontSize: 13,
                         ),
                       ),
-                      if (stop.code != null)
-                        TextSpan(
-                          text: '  (Palina ${stop.code})',
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.normal,
-                            fontSize: 13,
-                          ),
-                        ),
-                    ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  ],
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close, size: 20),
+                icon: Icon(Icons.close, size: 20, color: AppleColors.secondaryLabel(context)),
                 tooltip: 'Chiudi',
                 onPressed: onClose,
               ),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            [
-              skipped
-                  ? (impact!.status == StopStatus.declaredSuspended
-                      ? '⚠️ Sospesa da GTT'
-                      : '⚠️ Non servita per deviazione')
-                  : '✓ Servita regolarmente',
-              if (direction != null) 'verso $direction',
-            ].join(' · '),
-            style: TextStyle(
-              color: skipped ? scheme.error : const Color(0xFF2E7D32),
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: skipped ? AppleColors.systemRed : AppleColors.systemGreen,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  [
+                    skipped
+                        ? (impact!.status == StopStatus.declaredSuspended
+                            ? 'sospesa da GTT'
+                            : 'non servita per deviazione')
+                        : 'servita regolarmente',
+                    if (direction != null) 'verso $direction',
+                  ].join(' · '),
+                  style: TextStyle(
+                    color: skipped ? AppleColors.systemRed : AppleColors.systemGreen,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
           ),
           if (skipped) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             for (final alt in impact!.alternatives.take(2))
-              Text(
-                '→ Dove salire: ${DisplayNames.stop(alt.stop)}'
-                '${alt.stop.code == null ? "" : " (${alt.stop.code})"}'
-                ' · ${alt.bestKnownMeters.round()} m a piedi'
-                '${alt.sameLine ? "" : " (altre linee)"}',
-                style: TextStyle(
-                  color: scheme.onErrorContainer,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
+              Padding(
+                padding: const EdgeInsets.only(left: 13, top: 2),
+                child: Text(
+                  '→ Dove salire: ${DisplayNames.stop(alt.stop)}'
+                  '${alt.stop.code == null ? "" : " (${alt.stop.code})"}'
+                  ' · ${alt.bestKnownMeters.round()} m a piedi'
+                  '${alt.sameLine ? "" : " (altre linee)"}',
+                  style: TextStyle(
+                    color: AppleColors.label(context).withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
                 ),
               ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
               if (onOpenArrivals != null)
                 FilledButton.tonalIcon(
                   onPressed: onOpenArrivals,
-                  icon: const Icon(Icons.departure_board, size: 18),
+                  icon: const Icon(Icons.departure_board, size: 16),
                   label: const Text('Orari e arrivi in tempo reale'),
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                    ),
                   ),
                 ),
               const Spacer(),
@@ -1149,10 +1208,17 @@ class FermataToccata extends StatelessWidget {
                 TextButton.icon(
                   onPressed: onToggleSave,
                   icon: Icon(
-                    saved! ? Icons.bookmark : Icons.bookmark_add_outlined,
+                    saved! ? Icons.bookmark : Icons.bookmark_border,
                     size: 18,
+                    color: AppleColors.systemBlue,
                   ),
-                  label: Text(saved! ? 'Salvata' : 'Salva'),
+                  label: Text(
+                    saved! ? 'Salvata' : 'Salva',
+                    style: const TextStyle(
+                      color: AppleColors.systemBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                   ),
@@ -1184,7 +1250,6 @@ class VeicoloToccato extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final last = track.points.last;
     final rotta = VehicleHeading.of(track, directions);
     final isOff = track.isOffRoute;
@@ -1201,26 +1266,29 @@ class VeicoloToccato extends StatelessWidget {
         ? '${secondiFa}s fa'
         : '${(secondiFa / 60).round()} min fa';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isOff
+        ? (isDark ? const Color(0x29FF453A) : const Color(0x14FF3B30))
+        : AppleColors.secondarySystemGroupedBackground(context);
+    final borderColor = isOff
+        ? (isDark ? const Color(0x4DFF453A) : const Color(0x33FF3B30))
+        : AppleColors.separator(context);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       decoration: BoxDecoration(
-        color: isOff
-            ? scheme.errorContainer.withValues(alpha: 0.85)
-            : scheme.surfaceContainerHighest,
+        color: bg,
         border: Border(
           top: BorderSide(
-            color: isOff ? scheme.error : const Color(0xFF00E676),
-            width: 2.5,
+            color: borderColor,
+            width: AppleSizes.hairline,
+          ),
+          bottom: BorderSide(
+            color: AppleColors.separator(context),
+            width: AppleSizes.hairline,
           ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1239,46 +1307,31 @@ class VeicoloToccato extends StatelessWidget {
                         Text(
                           'Mezzo #${track.vehicleId}',
                           style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            letterSpacing: -0.3,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isOff
-                                ? scheme.error
-                                : const Color(0xFF00E676),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            isOff ? 'FUORI PERCORSO' : 'IN LINEA',
-                            style: TextStyle(
-                              color: isOff ? Colors.white : Colors.black87,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
+                        if (isOff)
+                          const StatusPill.alert('Fuori percorso')
+                        else
+                          const StatusPill.success('In linea'),
                       ],
                     ),
                     if (capolinea != null)
                       Text(
                         'Verso $capolinea',
                         style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 12,
+                          color: AppleColors.secondaryLabel(context),
+                          fontSize: 13,
                         ),
                       ),
                   ],
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close, size: 20),
+                icon: Icon(Icons.close, size: 20, color: AppleColors.secondaryLabel(context)),
                 tooltip: 'Chiudi',
                 onPressed: onClose,
               ),
@@ -1287,23 +1340,23 @@ class VeicoloToccato extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.gps_fixed, size: 14, color: scheme.onSurfaceVariant),
+              Icon(Icons.gps_fixed, size: 14, color: AppleColors.secondaryLabel(context)),
               const SizedBox(width: 4),
               Text(
                 'Posizione GPS: $tempoStr',
                 style: TextStyle(
-                  color: scheme.onSurfaceVariant,
+                  color: AppleColors.secondaryLabel(context),
                   fontSize: 12,
                 ),
               ),
               if (last.bearing != null) ...[
                 const SizedBox(width: 12),
-                Icon(Icons.navigation, size: 13, color: scheme.onSurfaceVariant),
+                Icon(Icons.navigation, size: 13, color: AppleColors.secondaryLabel(context)),
                 const SizedBox(width: 2),
                 Text(
                   '${last.bearing!.round()}°',
                   style: TextStyle(
-                    color: scheme.onSurfaceVariant,
+                    color: AppleColors.secondaryLabel(context),
                     fontSize: 12,
                   ),
                 ),
@@ -1315,6 +1368,9 @@ class VeicoloToccato extends StatelessWidget {
                 label: const Text('Centra mezzo'),
                 style: FilledButton.styleFrom(
                   visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                  ),
                 ),
               ),
             ],
@@ -1530,44 +1586,49 @@ class _Comando extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final colore = attivo ? scheme.onPrimaryContainer : scheme.onSurface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colore = attivo
+        ? AppleColors.systemBlue
+        : (isDark ? Colors.white : Colors.black87);
+    final bg = attivo
+        ? AppleColors.systemBlue.withValues(alpha: 0.12)
+        : Colors.transparent;
     final pulsante = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Material(
-        color: attivo ? scheme.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        color: bg,
+        borderRadius: BorderRadius.circular(AppleSizes.radiusMd),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: busy ? null : onPressed,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
+            constraints: const BoxConstraints(minHeight: 52),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (busy)
                     SizedBox(
-                      width: 22,
-                      height: 22,
+                      width: 20,
+                      height: 20,
                       child: Padding(
                         padding: const EdgeInsets.all(2),
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
+                          strokeWidth: 2,
                           color: colore,
                         ),
                       ),
                     )
                   else if (indicatore != null)
                     IconTheme(
-                      data: IconThemeData(color: colore, size: 22),
-                      child: SizedBox(width: 22, height: 22, child: indicatore),
+                      data: IconThemeData(color: colore, size: 20),
+                      child: SizedBox(width: 20, height: 20, child: indicatore),
                     )
                   else
-                    Icon(icon, size: 22, color: colore),
-                  const SizedBox(height: 4),
+                    Icon(icon, size: 20, color: colore),
+                  const SizedBox(height: 3),
                   // Su uno schermo stretto, o col testo ingrandito, la
                   // scritta si stringe invece di andare a capo o tagliarsi.
                   FittedBox(
@@ -1576,8 +1637,9 @@ class _Comando extends StatelessWidget {
                       testo,
                       maxLines: 1,
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.2,
                         color: colore,
                       ),
                     ),
@@ -1707,31 +1769,51 @@ class _MapButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xCC1C1C1E) : const Color(0xE6FFFFFF);
+    final borderColor = isDark ? const Color(0x33545458) : const Color(0x26000000);
+
     return Tooltip(
       message: tooltip,
-      child: Material(
-        color: scheme.surface,
-        shape: const CircleBorder(),
-        elevation: 3,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: busy ? null : onPressed,
-          child: SizedBox(
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
             width: 44,
             height: 44,
-            child: busy
-                ? const Padding(
-                    padding: EdgeInsets.all(13),
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  )
-                : Icon(
-                    icon,
-                    size: 22,
-                    color: active
-                        ? StatusColors.of(context).info
-                        : scheme.onSurface,
-                  ),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: bg,
+              border: Border.all(color: borderColor, width: AppleSizes.hairline),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: busy ? null : onPressed,
+                child: Center(
+                  child: busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          icon,
+                          size: 20,
+                          color: active
+                              ? AppleColors.systemBlue
+                              : (isDark ? Colors.white : Colors.black87),
+                        ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

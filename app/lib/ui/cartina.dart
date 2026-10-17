@@ -53,41 +53,36 @@ class Cartina {
   /// percorso visto sui mezzi; dove i colori non bastano (chi non
   /// distingue bene il rosso dal verde) c'e' la freccia nelle fermate.
   Color direzione(int i) => scura
-      ? (i == 0 ? const Color(0xFF82A7FF) : const Color(0xFF4FD1A5))
-      : (i == 0 ? const Color(0xFF2A5BD7) : const Color(0xFF0B9470));
+      ? (i == 0 ? const Color(0xFF0A84FF) : const Color(0xFF30D158))
+      : (i == 0 ? const Color(0xFF007AFF) : const Color(0xFF34C759));
 
-  /// Spessore della linea del percorso normale, e di quelle che devono
-  /// spiccarci sopra: la deviazione e il percorso visto sui mezzi.
-  static const spessorePercorso = 5.5;
-  static const spessoreDeviazione = 7.0;
+  /// Spessore della linea del percorso normale (4.5 pt) e deviazione (5.5 pt)
+  static const spessorePercorso = 4.5;
+  static const spessoreDeviazione = 5.5;
 
-  /// Il mezzo che fa quella direzione: pieno, col bordo bianco. Gli
-  /// stessi colori delle linee, piu' scuri sotto l'icona bianca; grigio se
-  /// la direzione non si capisce.
+  /// Il mezzo che fa quella direzione: pieno, col bordo bianco.
   Color mezzo(int? direzione) => switch (direzione) {
-        0 => const Color(0xFF1F47AD),
-        1 => const Color(0xFF087558),
-        _ => Colors.blueGrey.shade700,
+        0 => const Color(0xFF007AFF),
+        1 => const Color(0xFF34C759),
+        _ => const Color(0xFF8E8E93),
       };
 
-  Color get deviazione => scura ? Colors.red.shade400 : Colors.red.shade700;
+  Color get deviazione => scura ? const Color(0xFFFF453A) : const Color(0xFFFF3B30);
 
-  Color get osservato => scura ? Colors.purple.shade300 : Colors.purple.shade600;
+  Color get osservato => scura ? const Color(0xFFBF5AF2) : const Color(0xFFAF52DE);
 
   /// Fermata non servita, mezzo fuori percorso.
-  Color get chiusa => scura ? Colors.red.shade600 : const Color(0xFFB3261E);
+  Color get chiusa => scura ? const Color(0xFFFF453A) : const Color(0xFFFF3B30);
 
   /// Il bordo della fermata toccata.
-  Color get selezione =>
-      scura ? const Color(0xFFF9D400) : const Color(0xFF1E1E1E);
+  Color get selezione => scura ? const Color(0xFF0A84FF) : const Color(0xFF007AFF);
 
-  /// Il bordo di una fermata senza un verso solo: un palo usato da tutte
-  /// e due le direzioni, o che non si riesce a mettere sul percorso.
+  /// Il bordo di una fermata senza un verso solo.
   Color get bordoFermata =>
-      scura ? Colors.blueGrey.shade300 : Colors.blueGrey.shade600;
+      scura ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93);
 
   /// Il fondo della scritta dell'attribuzione.
   Color get fondoAttribuzione => scura
-      ? Colors.black.withValues(alpha: 0.6)
-      : Colors.white.withValues(alpha: 0.8);
+      ? Colors.black.withValues(alpha: 0.5)
+      : Colors.white.withValues(alpha: 0.7);
 }

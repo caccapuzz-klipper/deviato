@@ -176,8 +176,11 @@ class AppleSizes {
   const AppleSizes._();
 
   static const double radiusCard = 12.0;
-  static const double radiusPill = 8.0;
+  static const double radiusPill = 20.0;
   static const double radiusSmall = 6.0;
+  static const double radiusSm = 6.0;
+  static const double radiusMd = 10.0;
+  static const double radiusLg = 16.0;
   static const double hairline = 0.5;
   static const double marginHorizontal = 16.0;
   static const double minTappable = 44.0;
@@ -390,6 +393,34 @@ class StatusPill extends StatelessWidget {
     this.outline = false,
     super.key,
   });
+
+  const StatusPill.alert(
+    this.text, {
+    this.icon,
+    this.outline = false,
+    super.key,
+  }) : color = AppleColors.systemRed;
+
+  const StatusPill.success(
+    this.text, {
+    this.icon,
+    this.outline = false,
+    super.key,
+  }) : color = AppleColors.systemGreen;
+
+  const StatusPill.info(
+    this.text, {
+    this.icon,
+    this.outline = false,
+    super.key,
+  }) : color = AppleColors.systemBlue;
+
+  const StatusPill.warning(
+    this.text, {
+    this.icon,
+    this.outline = false,
+    super.key,
+  }) : color = AppleColors.systemOrange;
 
   final String text;
   final Color color;
