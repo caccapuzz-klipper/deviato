@@ -83,3 +83,28 @@ Per mantenere il codice manutenibile e centralizzato, creiamo:
 * **Percorso**: Spessore sottile (`4 pt`) con leggera traccia di contorno (`1 pt`), differenziando visivamente la tratta regolare (blu) da quella deviata (rosso).
 * **Fermate**: Punti circolari minimali (diametro `6 pt`) con anellino sottile. La fermata selezionata mostra un alone delicato (`12 pt`).
 * **Pulsanti di controllo**: Piccoli pulsanti circolari bianchi/traslucidi (stile Apple Maps) posizionati in alto a destra.
+
+---
+
+## 3. Registro dell'Implementazione (Fasi A - E)
+
+Tutti i cambiamenti sono stati realizzati con disciplina di commit atomici su branch `ui-apple`, senza intaccare la logica di business (`lib/core/`) e preservando al 100% tutti i test e i contratti funzionali:
+
+| Commit | Schermata / Componente | Modifiche Grafiche Apple HIG |
+| :--- | :--- | :--- |
+| `d9847a8` | **Fase A - Audit & Baseline** | Stesura di `docs/DESIGN.md` e screenshot di riferimento in `docs/design/prima/`. |
+| `da33187` | **Fase B - Visual Language & Theme** | Creazione di `apple_theme.dart` (`AppleColors`, `AppleTypography`, `AppleSizes`, `AppGroupedCard`, `AppSection`, `StatusPill`, `AppleTranslucentBar`) e adattamento di `theme.dart`. |
+| `292cc23` | **Fase C - Mappa & Controlli** | `cartina.dart`, `line_map.dart`: pulsanti fluttuanti con frosted glass blur (`BackdropFilter`), cerchietti fermata minimali Apple Transit, hairline borders. |
+| `fc400f0` | **Fase D - Home Screen** | `home_screen.dart`: segmented controls Cupertino, `AppGroupedCard`, etichette di stato calme senza toni allarmistici, percorsi salvati posizionati elegantemente. |
+| `cfae435` | **Fase D - Line Picker** | `line_picker.dart`: campo di ricerca in pillola iOS, pillole di stato discrete, transizioni fluide. |
+| `7d5a0e2` | **Fase D - Line Screen** | `line_screen.dart`: pulsante galleggiante frosted glass per `_PulsanteMezzi`, `AppGroupedCard` per `_ReportCard` e avvisi, hairline dividers. |
+| `7389048` | **Fase D - Stop Screen** | `stop_screen.dart`: Inset Grouped card, indicatori transiti in tempo reale con icone calme, retry button Cupertino. |
+| `ddd0e2b` | **Fase D - Saved Journeys** | `saved_journey_screen.dart`, `journey_editor_screen.dart`, `journey_stop_picker.dart`: timeline lineare con step chiari, modali Apple, Cupertino search. |
+| `8f30b38` | **Fase D - Info Screen** | `info_screen.dart`: stile Apple Impostazioni raggruppate, icone Cupertino, sezioni omogenee. |
+| `66c2fa5` | **Fase D - Mappa Fullscreen** | `full_map_screen.dart`: pulsanti barra superiore traslucidi con blur frosted glass e chevron Cupertino. |
+| `715e7d1` | **Fase D - Scheda Mappa** | `scheda_mappa.dart`: scheda fluttuante con bordo hairline e ombra morbida diffusa, tab a pillola segmentata iOS. |
+| `361a1c6` | **Fase D - Riassunto** | `riassunto.dart`: card di riassunto con bordo sottile, tonalità pastello calma, tipografia SF Pro. |
+| `eae14bb` | **Fase D - Fermate Salvate** | `saved_stop_card.dart`: Inset Grouped card con separatori hairline e badge di stato puliti. |
+| `2366870` | **Fase D - Live Watch** | `live_watch_card.dart`: card radar in tempo reale stile iOS widget con pulsanti a pillola. |
+| `46a6828` | **Fase D - Line Tile** | `line_tile.dart`: accessorio disclosure chevron Cupertino per affordance iOS standard. |
+| `28efd6e` | **Fase E - Qualità e Lint** | Risoluzione di tutti i linter warnings e controllo di sincronia BuildContext. Analisi a 0 problemi. |
