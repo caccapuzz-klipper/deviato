@@ -11,6 +11,7 @@ import '../core/sources/trip_updates_gtt.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
 import 'apple_theme.dart';
+import 'favorite_stop_widget.dart';
 import 'line_badge.dart';
 import 'theme.dart';
 
@@ -38,17 +39,64 @@ class _StopScreenState extends State<StopScreen> {
   String? _errore;
   DateTime _oraRif = DateTime.now();
   Timer? _timerAutoRefresh;
+  bool _isFavoriteWidget = false;
 
   @override
   void initState() {
     super.initState();
     _carica();
+    _controllaSeWidgetPreferito();
     // Aggiorna l'orario di riferimento ogni 30 secondi
     _timerAutoRefresh = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
         setState(() => _oraRif = DateTime.now());
       }
     });
+  }
+
+  Future<void> _controllaSeWidgetPreferito() async {
+    final isFav = await FavoriteWidgetStop.isFavorite(
+      widget.stop.id,
+      widget.stop.code,
+    );
+    if (mounted) setState(() => _isFavoriteWidget = isFav);
+  }
+
+  Future<void> _toggleFavoriteWidget() async {
+    if (_isFavoriteWidget) {
+      await FavoriteWidgetStop.clear();
+      if (mounted) {
+        setState(() => _isFavoriteWidget = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Fermata rimossa dal Widget della Home'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } else {
+      final code = (widget.stop.code != null && widget.stop.code!.isNotEmpty)
+          ? widget.stop.code
+          : (_arrivi?.stopCode.isNotEmpty == true ? _arrivi!.stopCode : null);
+      await FavoriteWidgetStop.save(
+        id: widget.stop.id,
+        name: DisplayNames.stop(widget.stop),
+        code: code,
+      );
+      if (mounted) {
+        setState(() => _isFavoriteWidget = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Fermata "${DisplayNames.stop(widget.stop)}" impostata nel Widget della Home!',
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -167,6 +215,18 @@ class _StopScreenState extends State<StopScreen> {
         ),
         actions: [
           IconButton(
+            icon: Icon(
+              _isFavoriteWidget
+                  ? CupertinoIcons.pin_fill
+                  : CupertinoIcons.pin,
+              color: _isFavoriteWidget ? AppleColors.systemBlue : null,
+            ),
+            tooltip: _isFavoriteWidget
+                ? 'Rimuovi dal Widget preferito'
+                : 'Fissa come Widget preferito',
+            onPressed: _toggleFavoriteWidget,
+          ),
+          IconButton(
             icon: _loading
                 ? const SizedBox(
                     width: 18,
@@ -274,6 +334,46 @@ class _StopScreenState extends State<StopScreen> {
                 style: AppleTypography.footnote(context),
               ),
             ],
+          ),
+        ),
+
+        // Pulsante Widget preferito in stile Apple
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: _isFavoriteWidget
+                ? AppleColors.systemBlue.withValues(alpha: 0.12)
+                : AppleColors.secondarySystemGroupedBackground(context),
+            borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+            onPressed: _toggleFavoriteWidget,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _isFavoriteWidget
+                      ? CupertinoIcons.checkmark_seal_fill
+                      : CupertinoIcons.square_on_square,
+                  size: 16,
+                  color: _isFavoriteWidget
+                      ? AppleColors.systemBlue
+                      : AppleColors.secondaryLabel(context),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _isFavoriteWidget
+                      ? 'Fermata impostata nel Widget Home'
+                      : 'Fissa come Widget fermata in Home',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _isFavoriteWidget
+                        ? AppleColors.systemBlue
+                        : AppleColors.label(context),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
 
