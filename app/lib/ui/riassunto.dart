@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/deviation_service.dart';
 import '../core/models/transit.dart';
 import '../core/pipeline/closure_summary.dart';
 import '../core/text/display_names.dart';
+import 'apple_theme.dart';
 import 'theme.dart';
 
 /// Quale parte del riassunto mostrare.
@@ -186,19 +188,23 @@ class RiassuntoLinea extends StatelessWidget {
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: scheme.errorContainer.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
+        color: AppleColors.systemRed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusCard),
+        border: Border.all(
+          color: AppleColors.systemRed.withValues(alpha: 0.25),
+          width: 0.5,
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Icon(
-                Icons.do_not_disturb_on_outlined,
+                CupertinoIcons.slash_circle,
                 size: 20,
-                color: scheme.error,
+                color: AppleColors.systemRed,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -206,8 +212,8 @@ class RiassuntoLinea extends StatelessWidget {
                   totale == 1
                       ? '1 fermata non servita'
                       : '$totale fermate non servite',
-                  style: testo.titleMedium?.copyWith(
-                    color: scheme.error,
+                  style: AppleTypography.headline(context).copyWith(
+                    color: AppleColors.systemRed,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -219,7 +225,9 @@ class RiassuntoLinea extends StatelessWidget {
               padding: const EdgeInsets.only(left: 28, top: 2),
               child: Text(
                 'fino al ${_data(fine)}',
-                style: testo.bodyMedium?.copyWith(color: scheme.error),
+                style: AppleTypography.subheadline(context).copyWith(
+                  color: AppleColors.systemRed,
+                ),
               ),
             ),
           for (final d in direzioni)
@@ -251,13 +259,12 @@ class _Riga extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final testo = Theme.of(context).textTheme;
     return Padding(
       padding: margine ?? const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icona, size: 22, color: colore),
+          Icon(icona, size: 20, color: colore),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -265,7 +272,7 @@ class _Riga extends StatelessWidget {
               children: [
                 Text(
                   titolo,
-                  style: testo.titleMedium?.copyWith(
+                  style: AppleTypography.headline(context).copyWith(
                     color: colore,
                     fontWeight: FontWeight.w600,
                   ),
@@ -273,7 +280,10 @@ class _Riga extends StatelessWidget {
                 if (dettaglio != null && !soloTitolo)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(dettaglio!, style: testo.bodyMedium),
+                    child: Text(
+                      dettaglio!,
+                      style: AppleTypography.subheadline(context),
+                    ),
                   ),
               ],
             ),
