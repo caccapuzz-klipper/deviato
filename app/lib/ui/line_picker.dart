@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/deviation_service.dart';
@@ -7,10 +8,10 @@ import '../core/pipeline/line_search.dart';
 import '../core/pipeline/stop_search.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'line_badge.dart';
 import 'line_screen.dart';
 import 'stop_screen.dart';
-import 'theme.dart';
 
 /// Apre la ricerca delle linee, sopra la schermata da cui la si chiama.
 ///
@@ -22,6 +23,10 @@ Future<void> showLinePicker(BuildContext context, AppRepository repo) =>
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppleSizes.radiusLg)),
+      ),
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.92,
         child: LinePicker(repo: repo),
@@ -125,13 +130,15 @@ class _LinePickerState extends State<LinePicker> {
     );
   }
 
-  void _add(TransitLine line) {
-    widget.repo.addLine(line);
-    ScaffoldMessenger.of(context).showSnackBar(
+  void _add(TransitLine line) async {
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+    await widget.repo.settings.addLine(line.shortName);
+    await widget.repo.addLine(line);
+    await widget.repo.refreshAll();
+    messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          'Linea ${line.shortName} aggiunta alle linee di maggior interesse',
-        ),
+        content: Text('Linea ${line.shortName} aggiunta'),
       ),
     );
   }
@@ -140,9 +147,7 @@ class _LinePickerState extends State<LinePicker> {
     widget.repo.removeLine(line);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Linea ${line.shortName} rimossa dalle linee di maggior interesse',
-        ),
+        content: Text('Linea ${line.shortName} rimossa'),
       ),
     );
   }
@@ -182,15 +187,25 @@ class _LinePickerState extends State<LinePicker> {
               onChanged: _cambiata,
               decoration: InputDecoration(
                 hintText: 'Linea, via, fermata o numero di palina',
-                prefixIcon: const Icon(Icons.search),
+                hintStyle: TextStyle(
+                  color: AppleColors.secondaryLabel(context),
+                  fontSize: 15,
+                ),
+                prefixIcon: const Icon(CupertinoIcons.search, size: 18),
                 suffixIcon: _query.text.isEmpty
                     ? null
                     : IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(CupertinoIcons.clear_circled_solid, size: 18),
                         tooltip: 'Cancella',
                         onPressed: () => setState(_query.clear),
                       ),
-                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: AppleColors.tertiarySystemGroupedBackground(context),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                  borderSide: BorderSide.none,
+                ),
                 isDense: true,
               ),
             ),
@@ -242,7 +257,10 @@ class _LinePickerState extends State<LinePicker> {
       );
     }
 
-    final gia = {for (final l in repo.lines) l.routeId};
+    final watchlist = repo.settings.watchlist.map((w) => w.toUpperCase()).toSet();
+    bool giaAggiunta(TransitLine l) =>
+        watchlist.contains(l.shortName.toUpperCase()) ||
+        watchlist.contains(l.routeId.toUpperCase());
     final trovate = LineSearch.filter(repo.allLines, _query.text);
     final cercando = _query.text.trim().isNotEmpty;
     final fermate = cercando && repo.fermateRete != null
@@ -283,7 +301,7 @@ class _LinePickerState extends State<LinePicker> {
             child: Text(titolo, style: testo.titleSmall),
           ),
         );
-        righe.addAll(gruppo.map((l) => _riga(l, gia.contains(l.routeId))));
+        righe.addAll(gruppo.map((l) => _riga(l, giaAggiunta(l))));
       }
     } else {
       // Due gruppi, Linee e Fermate. Con un numero prima le linee («15» e'
@@ -291,7 +309,7 @@ class _LinePickerState extends State<LinePicker> {
       final linee = [
         if (trovate.isNotEmpty) ...[
           _titolo('Linee'),
-          ...trovate.map((l) => _riga(l, gia.contains(l.routeId))),
+          ...trovate.map((l) => _riga(l, giaAggiunta(l))),
         ],
       ];
       final soloFermate = [
@@ -327,33 +345,35 @@ class _LinePickerState extends State<LinePicker> {
 
   Widget _titolo(String testo) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-    child: Text(testo, style: Theme.of(context).textTheme.titleSmall),
+    child: Text(testo, style: AppleTypography.sectionHeader(context)),
   );
 
   /// Una fermata fra i risultati: nome, numero di palina e le linee che
   /// ci passano.
   Widget _rigaFermata(FermataCercabile f) {
-    final scheme = Theme.of(context).colorScheme;
     final perId = {for (final l in widget.repo.allLines) l.routeId: l};
     final linee = <TransitLine>[
       for (final id in {for (final p in f.passaggi) p.routeId}) ?perId[id],
     ];
     return ListTile(
-      leading: SizedBox(
-        width: 60,
+      leading: const SizedBox(
+        width: 44,
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Icon(Icons.signpost_outlined, color: scheme.onSurfaceVariant),
+          child: Icon(CupertinoIcons.placemark, color: AppleColors.systemBlue, size: 22),
         ),
       ),
       title: Text.rich(
         TextSpan(
           children: [
-            TextSpan(text: DisplayNames.stop(f.stop)),
+            TextSpan(
+              text: DisplayNames.stop(f.stop),
+              style: AppleTypography.headline(context).copyWith(fontSize: 15),
+            ),
             if (f.stop.code != null)
               TextSpan(
                 text: '  ${f.stop.code}',
-                style: TextStyle(color: scheme.onSurfaceVariant),
+                style: TextStyle(color: AppleColors.secondaryLabel(context), fontSize: 13),
               ),
           ],
         ),
@@ -370,7 +390,7 @@ class _LinePickerState extends State<LinePicker> {
                 ],
               ),
             ),
-      trailing: Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+      trailing: Icon(CupertinoIcons.chevron_right, size: 14, color: AppleColors.secondaryLabel(context)),
       onTap: () => setState(() => _fermata = f),
     );
   }
@@ -453,7 +473,6 @@ class _LinePickerState extends State<LinePicker> {
 
   Widget _rigaPassaggio(FermataCercabile f, TransitLine l, int dir) {
     final repo = widget.repo;
-    final scheme = Theme.of(context).colorScheme;
     final capolinea = repo.fermateRete?.capolineaDi(l.routeId, dir);
     final salvata = repo.isSaved(
       SavedStop(routeId: l.routeId, directionId: dir, stopId: f.stop.id),
@@ -470,21 +489,22 @@ class _LinePickerState extends State<LinePicker> {
         capolinea == null
             ? 'Linea ${l.shortName}'
             : 'verso ${DisplayNames.direction(capolinea, longName: l.longName)}',
+        style: AppleTypography.headline(context).copyWith(fontSize: 15),
       ),
       trailing: salvata
           ? Semantics(
               label: 'Già fra le tue fermate',
-              child: Icon(Icons.check, color: StatusColors.of(context).ok),
+              child: const Icon(CupertinoIcons.checkmark_circle_fill, color: AppleColors.systemGreen, size: 22),
             )
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.bookmark_add_outlined, color: scheme.primary),
-                const SizedBox(width: 6),
-                Text(
+                const Icon(CupertinoIcons.bookmark, color: AppleColors.systemBlue, size: 18),
+                const SizedBox(width: 4),
+                const Text(
                   'Salva',
                   style: TextStyle(
-                    color: scheme.primary,
+                    color: AppleColors.systemBlue,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -496,8 +516,6 @@ class _LinePickerState extends State<LinePicker> {
 
   Widget _riga(TransitLine line, bool aggiunta) {
     final parti = DisplayNames.routeParts(line.longName ?? '');
-    final scheme = Theme.of(context).colorScheme;
-    final colori = StatusColors.of(context);
     final status = widget.repo.statusOf(line.routeId);
     final isDeviata = status != null && status.activeReports.isNotEmpty;
     final isRegolare = status != null && status.activeReports.isEmpty;
@@ -517,78 +535,44 @@ class _LinePickerState extends State<LinePicker> {
           if (parti.qualifier != null)
             Text(
               parti.qualifier!,
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: TextStyle(color: AppleColors.secondaryLabel(context)),
             ),
           if (isDeviata)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: scheme.errorContainer,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    size: 14,
-                    color: scheme.onErrorContainer,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'ATTENZIONE: DEVIATA${status.allSkippedStops.isNotEmpty ? " (-${status.allSkippedStops.length} fermate)" : ""}',
-                    style: TextStyle(
-                      color: scheme.onErrorContainer,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: StatusPill.alert(
+                status.allSkippedStops.isNotEmpty
+                    ? '${status.allSkippedStops.length} non ${status.allSkippedStops.length == 1 ? "servita" : "servite"}'
+                    : 'Deviazione',
               ),
             )
           else if (isRegolare)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: colori.ok.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_circle_outline, size: 14, color: colori.ok),
-                  const SizedBox(width: 4),
-                  Text(
-                    'REGOLARE',
-                    style: TextStyle(
-                      color: colori.ok,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Text(
-              'Tocca per vedere il percorso sulla mappa',
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: StatusPill.success('Regolare'),
             ),
         ],
       ),
-      trailing: IconButton(
-        icon: Icon(
-          aggiunta ? Icons.star : Icons.star_border,
-          color: aggiunta ? Colors.amber[700] : scheme.onSurfaceVariant,
-        ),
-        tooltip: aggiunta
-            ? 'Rimuovi da maggior interesse'
-            : 'Aggiungi a maggior interesse',
-        onPressed: () => aggiunta ? _remove(line) : _add(line),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(
+              aggiunta ? CupertinoIcons.star_fill : CupertinoIcons.star,
+              color: aggiunta ? AppleColors.systemOrange : AppleColors.secondaryLabel(context),
+              size: 20,
+            ),
+            tooltip: aggiunta ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti',
+            onPressed: () => aggiunta ? _remove(line) : _add(line),
+          ),
+          IconButton(
+            icon: const Icon(CupertinoIcons.map, size: 20),
+            tooltip: 'Mappa percorso',
+            onPressed: () => _apriMappaLinea(line),
+          ),
+        ],
       ),
-      onTap: () => _apriMappaLinea(line),
+      onTap: aggiunta ? () => _apriMappaLinea(line) : () => _add(line),
     );
   }
 }
