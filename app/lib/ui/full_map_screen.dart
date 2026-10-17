@@ -1,3 +1,6 @@
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,6 +11,7 @@ import '../core/models/transit.dart';
 import '../core/pipeline/closure_summary.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'cartina.dart';
 import 'line_badge.dart';
 import 'line_map.dart';
@@ -256,7 +260,6 @@ class _Barra extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       bottom: false,
       child: SizedBox(
@@ -265,14 +268,32 @@ class _Barra extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
             children: [
-              Material(
-                color: scheme.surface,
-                shape: const CircleBorder(),
-                elevation: 2,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  tooltip: 'Indietro',
-                  onPressed: () => Navigator.pop(context),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppleColors.systemBackground(context).withValues(alpha: 0.8),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppleColors.separator(context),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        CupertinoIcons.chevron_back,
+                        size: 20,
+                        color: AppleColors.label(context),
+                      ),
+                      tooltip: 'Indietro',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -315,40 +336,57 @@ class _SceltaDirezione extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final etichetta = scelta == null || scelta! >= direzioni.length
         ? 'Entrambe le direzioni'
         : '→ ${direzioni[scelta!]}';
-    return Material(
-      color: scheme.surface,
-      shape: const StadiumBorder(),
-      elevation: 2,
-      child: PopupMenuButton<int>(
-        tooltip: 'Direzione',
-        initialValue: scelta ?? _tutte,
-        onSelected: (v) => onScelta(v == _tutte ? null : v),
-        itemBuilder: (_) => [
-          const PopupMenuItem(
-            value: _tutte,
-            child: Text('Entrambe le direzioni'),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppleColors.systemBackground(context).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppleColors.separator(context),
+              width: 0.5,
+            ),
           ),
-          for (var i = 0; i < direzioni.length; i++)
-            PopupMenuItem(value: i, child: Text('→ ${direzioni[i]}')),
-        ],
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  etichetta,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
+          child: PopupMenuButton<int>(
+            tooltip: 'Direzione',
+            initialValue: scelta ?? _tutte,
+            onSelected: (v) => onScelta(v == _tutte ? null : v),
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: _tutte,
+                child: Text('Entrambe le direzioni'),
               ),
-              const Icon(Icons.arrow_drop_down),
+              for (var i = 0; i < direzioni.length; i++)
+                PopupMenuItem(value: i, child: Text('→ ${direzioni[i]}')),
             ],
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      etichetta,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppleTypography.subheadline(context).copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    CupertinoIcons.chevron_down,
+                    size: 13,
+                    color: AppleColors.secondaryLabel(context),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
