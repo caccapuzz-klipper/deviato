@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -26,6 +28,9 @@ import 'stop_screen.dart';
 import 'theme.dart';
 import 'package:flutter/cupertino.dart';
 import 'apple_theme.dart';
+import '../core/sources/vehicles_source.dart';
+import 'favorite_stop_widget.dart';
+import 'saved_line_map_preview.dart';
 
 /// La home: le fermate che usi, e sotto le linee.
 ///
@@ -267,6 +272,22 @@ class _HomeScreenState extends State<HomeScreen> {
               showLinePicker(context, widget.repo);
             },
           ),
+          ListTile(
+            leading: const Icon(CupertinoIcons.square_on_square, color: AppleColors.systemBlue),
+            title: const Text('Widget Fermata preferita'),
+            subtitle: const Text('Configura o cambia la fermata del Widget Home'),
+            onTap: () {
+              Navigator.pop(context);
+              showFavoriteStopPicker(context, widget.repo, onSelected: (stop) async {
+                await FavoriteWidgetStop.save(
+                  id: stop.id,
+                  name: DisplayNames.stop(stop),
+                  code: stop.code,
+                );
+                setState(() {});
+              });
+            },
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.help_outline),
@@ -376,6 +397,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Widget Fermata Preferita in primo piano stile Apple
+        FavoriteStopWidgetCard(repo: widget.repo),
+
         // Scheda in evidenza per inserimento rapido stile Apple
         AppGroupedCard(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1099,7 +1123,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-            if (isWatching)
+            if (isWatching) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Container(
@@ -1131,6 +1155,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              SavedLineMapPreview(
+                line: line,
+                status: status,
+                vehicles: watchTracks,
+                loadingVehicles: watchTracks.isEmpty,
+                onOpenMap: () => _apri(context, line),
+              ),
+            ],
 
             const SizedBox(height: 10),
             Row(
@@ -1546,17 +1579,58 @@ class _CardLineaSalvataConFermateState
   int _dirIndex = 0;
   bool _loading = false;
   final _filtroFermate = TextEditingController();
+  List<VehicleTrack> _liveVehicles = const [];
+  bool _loadingVehicles = false;
+  Timer? _vehiclesTimer;
 
   @override
   void initState() {
     super.initState();
     _caricaFermateSeNecessario();
+    _caricaMezziLive();
+    _vehiclesTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (mounted) _caricaMezziLive();
+    });
   }
 
   @override
   void dispose() {
+    _vehiclesTimer?.cancel();
     _filtroFermate.dispose();
     super.dispose();
+  }
+
+  Future<void> _caricaMezziLive() async {
+    if (widget.repo.isWatching(widget.line.routeId)) {
+      if (mounted) {
+        setState(() {
+          _liveVehicles = widget.repo.liveTracks;
+          _loadingVehicles = false;
+        });
+      }
+      return;
+    }
+
+    if (_liveVehicles.isEmpty && mounted) {
+      setState(() => _loadingVehicles = true);
+    }
+
+    try {
+      final snapshot = await VehiclesSource().fetch(routeId: widget.line.routeId);
+      final tracks = <VehicleTrack>[];
+      for (final obs in snapshot.matching) {
+        final t = VehicleTrack(obs.vehicleId)..points.add(obs);
+        tracks.add(t);
+      }
+      if (mounted) {
+        setState(() {
+          _liveVehicles = tracks;
+          _loadingVehicles = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingVehicles = false);
+    }
   }
 
   Future<void> _caricaFermateSeNecessario() async {
@@ -1700,6 +1774,17 @@ class _CardLineaSalvataConFermateState
                   ],
                 ),
               ),
+
+            // Preview della mappa con posizioni dei bus in tempo reale
+            const SizedBox(height: 10),
+            SavedLineMapPreview(
+              line: widget.line,
+              status: status,
+              vehicles: isWatching ? watchTracks : _liveVehicles,
+              loadingVehicles: _loadingVehicles,
+              onOpenMap: widget.onApriMappa,
+              onRefreshVehicles: _caricaMezziLive,
+            ),
 
             // Pulsanti veloci Mappa e Live
             const SizedBox(height: 10),
