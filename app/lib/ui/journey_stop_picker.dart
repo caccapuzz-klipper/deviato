@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models/transit.dart';
 import '../core/pipeline/stop_search.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'line_badge.dart';
 
 /// Selettore modale per cercare e aggiungere una fermata a una tappa di un percorso.
@@ -16,6 +18,10 @@ Future<FermataCercabile?> showJourneyStopPicker(
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
+    backgroundColor: AppleColors.secondarySystemGroupedBackground(context),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
     builder: (_) => FractionallySizedBox(
       heightFactor: 0.85,
       child: _JourneyStopPickerSheet(repo: repo),
@@ -52,8 +58,6 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final query = _searchController.text.trim();
 
     return ListenableBuilder(
@@ -72,34 +76,23 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Row(
                 children: [
-                  Icon(Icons.signpost_outlined, color: scheme.primary),
+                  const Icon(CupertinoIcons.placemark, color: AppleColors.systemBlue, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Seleziona una fermata',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppleTypography.headline(context),
                   ),
                 ],
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SearchBar(
+              child: CupertinoSearchTextField(
                 controller: _searchController,
-                autoFocus: true,
-                hintText: 'Cerca per nome o numero di palina…',
-                leading: const Icon(Icons.search),
-                trailing: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        setState(() => _searchController.clear());
-                      },
-                    ),
-                ],
+                autofocus: true,
+                placeholder: 'Cerca per nome o numero di palina…',
                 onChanged: (_) => setState(() {}),
+                onSuffixTap: () => setState(() => _searchController.clear()),
               ),
             ),
             const SizedBox(height: 8),
@@ -110,7 +103,7 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(strokeWidth: 2),
+                      CupertinoActivityIndicator(radius: 10),
                       SizedBox(width: 12),
                       Text('Caricamento elenco fermate GTT…'),
                     ],
@@ -123,11 +116,15 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
                 child: Center(
                   child: Column(
                     children: [
-                      const Icon(Icons.cloud_off, size: 40, color: Colors.grey),
+                      const Icon(CupertinoIcons.wifi_slash, size: 40, color: AppleColors.systemRed),
                       const SizedBox(height: 8),
-                      const Text('Elenco fermate non disponibile offline.'),
+                      Text(
+                        'Elenco fermate non disponibile offline.',
+                        style: AppleTypography.body(context),
+                      ),
                       const SizedBox(height: 12),
-                      FilledButton.tonal(
+                      CupertinoButton.filled(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                         onPressed: () => widget.repo.caricaFermate(forza: true),
                         child: const Text('Riprova a scaricare'),
                       ),
@@ -144,7 +141,7 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
                       'Digita il nome della fermata (es. "Porta Nuova", "Castello") '
                       'oppure il numero di palina impresso sul palo (es. "40").',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
+                      style: AppleTypography.footnote(context),
                     ),
                   ),
                 ),
@@ -157,7 +154,7 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
                     child: Text(
                       'Nessuna fermata trovata per "$query".',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
+                      style: AppleTypography.footnote(context),
                     ),
                   ),
                 ),
@@ -166,7 +163,11 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
               Expanded(
                 child: ListView.separated(
                   itemCount: risultati.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => Divider(
+                    height: 0.5,
+                    thickness: 0.5,
+                    color: AppleColors.separator(context),
+                  ),
                   itemBuilder: (context, index) {
                     final f = risultati[index];
                     final nome = DisplayNames.stop(f.stop);
@@ -195,16 +196,12 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
                           children: [
                             TextSpan(
                               text: nome,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: AppleTypography.callout(context).copyWith(fontWeight: FontWeight.w600),
                             ),
                             if (codice != null && codice.isNotEmpty)
                               TextSpan(
                                 text: '  palina $codice',
-                                style: TextStyle(
-                                  color: scheme.onSurfaceVariant,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.normal,
-                                ),
+                                style: AppleTypography.caption1(context),
                               ),
                           ],
                         ),
@@ -222,15 +219,12 @@ class _JourneyStopPickerSheetState extends State<_JourneyStopPickerSheet> {
                                   if (linee.length > 8)
                                     Text(
                                       '+${linee.length - 8}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: scheme.onSurfaceVariant,
-                                      ),
+                                      style: AppleTypography.caption2(context),
                                     ),
                                 ],
                               ),
                             ),
-                      trailing: const Icon(Icons.add_circle_outline),
+                      trailing: const Icon(CupertinoIcons.plus_circle, color: AppleColors.systemBlue, size: 20),
                       onTap: () => Navigator.pop(context, f),
                     );
                   },

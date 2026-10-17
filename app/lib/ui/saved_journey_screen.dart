@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models/saved_journey.dart';
 import '../core/models/transit.dart';
 import '../core/sources/trip_updates_gtt.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'journey_editor_screen.dart';
 import 'line_badge.dart';
 import 'theme.dart';
@@ -277,6 +279,10 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      backgroundColor: AppleColors.secondarySystemGroupedBackground(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return Padding(
@@ -287,23 +293,24 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.drag_indicator),
+                    const Icon(CupertinoIcons.arrow_up_arrow_down, size: 20, color: AppleColors.systemBlue),
                     const SizedBox(width: 8),
                     Text(
                       'Priorità per ${step.title}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: AppleTypography.headline(context),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Trascina le linee per cambiare l\'ordine in cui compaiono gli arrivi.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: AppleTypography.footnote(context),
                 ),
                 const SizedBox(height: 12),
                 Flexible(
                   child: ReorderableListView(
                     shrinkWrap: true,
+                    // ignore: deprecated_member_use
                     onReorder: (oldIndex, newIndex) {
                       setModalState(() {
                         if (oldIndex < newIndex) newIndex -= 1;
@@ -327,12 +334,22 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                       for (final l in items)
                         ListTile(
                           key: ValueKey(l),
-                          leading: const Icon(Icons.reorder),
+                          leading: const Icon(CupertinoIcons.line_horizontal_3, size: 20),
                           title: Text(
                             'Linea $l',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: AppleTypography.callout(context).copyWith(fontWeight: FontWeight.w600),
                           ),
-                          trailing: Chip(label: Text(l)),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppleColors.systemBlue.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              l,
+                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppleColors.systemBlue, fontSize: 12),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -340,7 +357,8 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: FilledButton(
+                  child: CupertinoButton.filled(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     onPressed: () => Navigator.pop(ctx),
                     child: const Text('Fatto'),
                   ),
@@ -360,38 +378,42 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
     final statusColors = StatusColors.of(context);
 
     return Scaffold(
+      backgroundColor: AppleColors.systemGroupedBackground(context),
       appBar: AppBar(
+        titleSpacing: 16,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        backgroundColor: AppleColors.systemBackground(context).withValues(alpha: 0.85),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               _journey.name,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: AppleTypography.headline(context),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             Text(
               '${_journey.cambiCount} ${_journey.cambiCount == 1 ? "cambio" : "cambi"} · ${_journey.steps.length} tratte',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+              style: AppleTypography.caption1(context),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_outlined),
+            icon: const Icon(CupertinoIcons.pencil),
             tooltip: 'Modifica percorso',
             onPressed: _apriModifica,
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(CupertinoIcons.arrow_clockwise),
             tooltip: 'Aggiorna orari',
             onPressed: () => _caricaTutto(),
           ),
         ],
       ),
       body: RefreshIndicator(
+        color: AppleColors.systemBlue,
         onRefresh: () => _caricaTutto(),
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -407,16 +429,20 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
                 children: [
-                  Icon(Icons.access_time, size: 14, color: scheme.onSurfaceVariant),
+                  Icon(CupertinoIcons.clock, size: 14, color: AppleColors.secondaryLabel(context)),
                   const SizedBox(width: 6),
                   Text(
                     'Orari aggiornati alle ${_oraRif.hour.toString().padLeft(2, '0')}:${_oraRif.minute.toString().padLeft(2, '0')}',
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    style: AppleTypography.caption1(context),
                   ),
                   const Spacer(),
                   Text(
                     'Tocca un orario per calcolare la coincidenza',
-                    style: TextStyle(fontSize: 11, color: scheme.primary, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppleColors.systemBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -440,42 +466,32 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
   Widget _buildCoincidenzaBanner(ThemeData theme, ColorScheme scheme) {
     final coinc = _coincidenzaAttiva!;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.16),
-        border: Border.all(color: Colors.amber[700]!, width: 2),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.amber.withValues(alpha: 0.2),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
+    return AppGroupedCard(
+      margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(14),
+      color: AppleColors.systemOrange.withValues(alpha: 0.10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.alt_route, color: Colors.amber[900]),
+              const Icon(CupertinoIcons.arrow_2_squarepath, color: AppleColors.systemOrange, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Coincidenza calcolata (evidenziata per 6 sec)',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber[950],
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppleColors.systemOrange,
                     fontSize: 14,
+                    letterSpacing: -0.2,
                   ),
                 ),
               ),
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(CupertinoIcons.xmark, size: 16),
                 onPressed: () {
                   setState(() {
                     _highlightedKeys.clear();
@@ -485,7 +501,14 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
               ),
             ],
           ),
-          const Divider(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Divider(
+              height: 1,
+              thickness: 0.5,
+              color: AppleColors.systemOrange.withValues(alpha: 0.3),
+            ),
+          ),
           for (final r in coinc.dettagli)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
@@ -493,8 +516,8 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                 r,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: r.startsWith('Partenza') ? FontWeight.w600 : FontWeight.bold,
-                  color: Colors.black87,
+                  fontWeight: r.startsWith('Partenza') ? FontWeight.w500 : FontWeight.w600,
+                  color: AppleColors.label(context),
                 ),
               ),
             ),
@@ -514,94 +537,95 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
     final isLoading = _stepLoading[step.id] ?? false;
     final error = _stepErrors[step.id];
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Intestazione Tappa
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 13,
-                  backgroundColor: scheme.primary,
-                  foregroundColor: scheme.onPrimary,
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
+    return AppGroupedCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Intestazione Tappa
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: const BoxDecoration(
+                  color: AppleColors.systemBlue,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        step.title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Fermate: ${step.stopNames.values.join(", ")}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
                 ),
-                if (step.lineNames.length > 1)
-                  IconButton(
-                    icon: const Icon(Icons.drag_indicator, size: 20),
-                    tooltip: 'Ordina priorità mezzi trascinabili',
-                    onPressed: () => _apriDialogPriorita(step),
-                  ),
-              ],
-            ),
-            const Divider(height: 20),
-
-            if (isLoading && arrivals.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (error != null && arrivals.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    error,
-                    style: TextStyle(color: scheme.error, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.title,
+                      style: AppleTypography.headline(context),
+                    ),
+                    Text(
+                      'Fermate: ${step.stopNames.values.join(", ")}',
+                      style: AppleTypography.caption1(context),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              )
-            else if (arrivals.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Text(
-                    'Nessun passaggio previsto nelle prossime ore per le linee selezionate (${step.lineNames.join(", ")}).',
-                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
+              ),
+              if (step.lineNames.length > 1)
+                IconButton(
+                  icon: const Icon(CupertinoIcons.arrow_up_arrow_down, size: 18, color: AppleColors.systemBlue),
+                  tooltip: 'Ordina priorità mezzi trascinabili',
+                  onPressed: () => _apriDialogPriorita(step),
                 ),
-              )
-            else ...[
-              for (final arr in arrivals)
-                _buildArrivalRow(arr, index, theme, scheme, statusColors),
             ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(
+              height: 1,
+              thickness: 0.5,
+              color: AppleColors.separator(context),
+            ),
+          ),
+
+          if (isLoading && arrivals.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CupertinoActivityIndicator(radius: 12)),
+            )
+          else if (error != null && arrivals.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  error,
+                  style: const TextStyle(color: AppleColors.systemRed, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else if (arrivals.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'Nessun passaggio previsto nelle prossime ore per le linee selezionate (${step.lineNames.join(", ")}).',
+                  style: TextStyle(color: AppleColors.secondaryLabel(context), fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else ...[
+            for (final arr in arrivals)
+              _buildArrivalRow(arr, index, theme, scheme, statusColors),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -625,20 +649,22 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
         onTap: () => _selezionaOrarioETracciaCoincidenze(item, stepIndex),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: isHighlighted
-                ? Colors.amber.withValues(alpha: 0.28)
-                : scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                ? AppleColors.systemOrange.withValues(alpha: 0.22)
+                : AppleColors.tertiarySystemGroupedBackground(context),
             border: Border.all(
-              color: isHighlighted ? Colors.amber[800]! : scheme.outlineVariant.withValues(alpha: 0.4),
-              width: isHighlighted ? 2.0 : 1.0,
+              color: isHighlighted
+                  ? AppleColors.systemOrange
+                  : AppleColors.separator(context),
+              width: isHighlighted ? 1.5 : 0.5,
             ),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
           ),
           child: Row(
             children: [
@@ -653,48 +679,38 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                         Expanded(
                           child: Text(
                             item.direzione,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            style: AppleTypography.callout(context).copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (item.isPreferenziale) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('⭐ Pref.', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 6),
+                          const StatusPill(
+                            text: 'Pref.',
+                            color: AppleColors.systemOrange,
+                            icon: CupertinoIcons.star_fill,
                           ),
                         ],
                       ],
                     ),
+                    const SizedBox(height: 2),
                     Row(
                       children: [
                         Text(
                           '${item.stopName} (${item.stopCode})',
-                          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                          style: AppleTypography.caption1(context),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (hasDeviazione) ...[
                           const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: scheme.error.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Deviata',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: scheme.error,
-                              ),
-                            ),
+                          const StatusPill(
+                            text: 'Deviata',
+                            color: AppleColors.systemRed,
                           ),
                         ],
                       ],
@@ -709,11 +725,19 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: isHighlighted
-                      ? Colors.amber[700]
+                      ? AppleColors.systemOrange
                       : (item.passaggio.isRealtime
-                          ? statusColors.info.withValues(alpha: 0.15)
-                          : scheme.surfaceContainerHigh),
-                  borderRadius: BorderRadius.circular(8),
+                          ? AppleColors.systemBlue.withValues(alpha: 0.12)
+                          : AppleColors.secondarySystemGroupedBackground(context)),
+                  borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                  border: Border.all(
+                    color: isHighlighted
+                        ? AppleColors.systemOrange
+                        : (item.passaggio.isRealtime
+                            ? AppleColors.systemBlue.withValues(alpha: 0.25)
+                            : AppleColors.separator(context)),
+                    width: 0.5,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -727,17 +751,17 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                             child: Icon(
                               Icons.sensors,
                               size: 12,
-                              color: isHighlighted ? Colors.white : statusColors.info,
+                              color: isHighlighted ? Colors.white : AppleColors.systemBlue,
                             ),
                           ),
                         Text(
                           etichetta,
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             fontSize: 13,
                             color: isHighlighted
                                 ? Colors.white
-                                : (item.passaggio.isRealtime ? statusColors.info : scheme.onSurface),
+                                : (item.passaggio.isRealtime ? AppleColors.systemBlue : AppleColors.label(context)),
                           ),
                         ),
                       ],
@@ -747,7 +771,7 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
                         item.passaggio.orario,
                         style: TextStyle(
                           fontSize: 10,
-                          color: isHighlighted ? Colors.white70 : scheme.onSurfaceVariant,
+                          color: isHighlighted ? Colors.white70 : AppleColors.secondaryLabel(context),
                         ),
                       ),
                   ],
@@ -767,20 +791,23 @@ class _SavedJourneyScreenState extends State<SavedJourneyScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+            color: AppleColors.secondarySystemGroupedBackground(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppleColors.separator(context), width: 0.5),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.directions_walk, size: 16),
+              Icon(Icons.directions_walk, size: 15, color: AppleColors.secondaryLabel(context)),
               const SizedBox(width: 6),
               Text(
                 'Trasferimento cambio: ~${step.transferMinutes} min a piedi',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                style: AppleTypography.footnote(context).copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppleColors.label(context),
+                ),
               ),
             ],
           ),

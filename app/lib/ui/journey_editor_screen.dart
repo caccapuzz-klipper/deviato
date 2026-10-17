@@ -1,9 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models/saved_journey.dart';
-import '../core/pipeline/stop_search.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'journey_stop_picker.dart';
 
 /// Schermata per creare o modificare una pagina di salvataggio percorsi con cambi multipli (fino a 3 cambi).
@@ -195,105 +196,122 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
     final scheme = theme.colorScheme;
 
     return Scaffold(
+      backgroundColor: AppleColors.systemGroupedBackground(context),
       appBar: AppBar(
+        titleSpacing: 16,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        backgroundColor: AppleColors.systemBackground(context).withValues(alpha: 0.85),
         title: Text(
           widget.initialJourney != null ? 'Modifica percorso' : 'Nuovo percorso salvato',
+          style: AppleTypography.headline(context),
         ),
         actions: [
-          FilledButton.icon(
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             onPressed: _salvaPercorso,
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Salva'),
+            child: const Text(
+              'Salva',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppleColors.systemBlue,
+              ),
+            ),
           ),
-          const SizedBox(width: 12),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
           // Nome della pagina di salvataggio
-          Card(
-            elevation: 0,
-            color: scheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Nome pagina di salvataggio',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+          AppGroupedCard(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'NOME PERCORSO',
+                  style: AppleTypography.sectionHeader(context),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _nameController,
+                  style: AppleTypography.body(context),
+                  decoration: InputDecoration(
+                    hintText: 'Es. Casa ➔ Ufficio, Università…',
+                    hintStyle: TextStyle(color: AppleColors.secondaryLabel(context)),
+                    prefixIcon: const Icon(CupertinoIcons.bookmark, size: 18, color: AppleColors.systemBlue),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: AppleColors.separator(context), width: 0.5),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      hintText: 'Es. Casa ➔ Ufficio, Università, Palestra…',
-                      prefixIcon: const Icon(Icons.bookmark_border),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      filled: true,
-                      fillColor: scheme.surface,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: AppleColors.separator(context), width: 0.5),
                     ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppleColors.systemBlue, width: 1.5),
+                    ),
+                    filled: true,
+                    fillColor: AppleColors.tertiarySystemGroupedBackground(context),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
 
           // Selezione numero di cambi
-          Card(
-            elevation: 0,
-            color: scheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.alt_route, color: scheme.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Quanti cambi devi fare?',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Puoi impostare da 1 a 3 cambi intermedi per arrivare a destinazione.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+          AppGroupedCard(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(CupertinoIcons.arrow_branch, color: AppleColors.systemBlue, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Quanti cambi devi fare?',
+                      style: AppleTypography.headline(context),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Puoi impostare da 1 a 3 cambi intermedi per arrivare a destinazione.',
+                  style: AppleTypography.footnote(context),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: CupertinoSlidingSegmentedControl<int>(
+                    groupValue: _cambiCount,
+                    backgroundColor: AppleColors.tertiarySystemGroupedBackground(context),
+                    children: const {
+                      1: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        child: Text('1 cambio\n(2 tratte)', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                      ),
+                      2: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        child: Text('2 cambi\n(3 tratte)', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                      ),
+                      3: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        child: Text('3 cambi\n(4 tratte)', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                      ),
+                    },
+                    onValueChanged: (val) {
+                      if (val != null) _cambiaNumeroCambi(val);
+                    },
                   ),
-                  const SizedBox(height: 12),
-                  SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment<int>(
-                        value: 1,
-                        label: Text('1 cambio\n(2 tratte)', textAlign: TextAlign.center),
-                      ),
-                      ButtonSegment<int>(
-                        value: 2,
-                        label: Text('2 cambi\n(3 tratte)', textAlign: TextAlign.center),
-                      ),
-                      ButtonSegment<int>(
-                        value: 3,
-                        label: Text('3 cambi\n(4 tratte)', textAlign: TextAlign.center),
-                      ),
-                    ],
-                    selected: {_cambiCount},
-                    onSelectionChanged: (val) => _cambiaNumeroCambi(val.first),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),
@@ -307,13 +325,10 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
           ],
 
           const SizedBox(height: 24),
-          FilledButton.icon(
+          CupertinoButton.filled(
             onPressed: _salvaPercorso,
-            icon: const Icon(Icons.check),
-            label: const Text('Salva pagina di percorso'),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: const Text('Salva pagina di percorso'),
           ),
           const SizedBox(height: 40),
         ],
@@ -325,150 +340,185 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
     final step = _steps[index];
     final isFirst = index == 0;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Titolo della tappa
-            Row(
+    return AppGroupedCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Titolo della tappa
+          Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: const BoxDecoration(
+                  color: AppleColors.systemBlue,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isFirst ? '1ª Tratta (Partenza)' : '$index° Cambio',
+                  style: AppleTypography.headline(context),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, thickness: 0.5, color: AppleColors.separator(context)),
+          ),
+
+          // Fermate da visionare
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Fermate da visionare:',
+                style: AppleTypography.callout(context).copyWith(fontWeight: FontWeight.w600),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => _aggiungiFermata(index),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(CupertinoIcons.add_circled, size: 16, color: AppleColors.systemBlue),
+                    SizedBox(width: 4),
+                    Text('Aggiungi', style: TextStyle(fontSize: 13, color: AppleColors.systemBlue)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (step.stopIds.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Nessuna fermata selezionata. Premi "+ Aggiungi" per sceglierne una o più.',
+                style: TextStyle(color: AppleColors.systemRed, fontSize: 12),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: scheme.primary,
-                  foregroundColor: scheme.onPrimary,
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                for (final stopId in step.stopIds)
+                  _buildStopChip(index, stopId, theme, scheme),
+              ],
+            ),
+          const SizedBox(height: 16),
+
+          // Mezzi / Linee da visionare
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Mezzi / Linee da visionare:',
+                style: AppleTypography.callout(context).copyWith(fontWeight: FontWeight.w600),
+              ),
+              if (step.lineNames.length > 1)
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _apriDialogPriorita(index),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(CupertinoIcons.arrow_up_arrow_down, size: 15, color: AppleColors.systemBlue),
+                      SizedBox(width: 4),
+                      Text('Priorità', style: TextStyle(fontSize: 13, color: AppleColors.systemBlue)),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
+            ],
+          ),
+          if (step.lineNames.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Aggiungi una fermata per selezionare automaticamente le linee in transito.',
+                style: AppleTypography.footnote(context),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final line in step.lineNames)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppleColors.systemBlue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                      border: Border.all(color: AppleColors.systemBlue.withValues(alpha: 0.3), width: 0.5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          line,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppleColors.systemBlue),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              step.lineNames.remove(line);
+                              step.priorityOrder.remove(line);
+                            });
+                          },
+                          child: const Icon(CupertinoIcons.xmark_circle_fill, size: 14, color: AppleColors.systemBlue),
+                        ),
+                      ],
+                    ),
+                  ),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  color: AppleColors.tertiarySystemGroupedBackground(context),
+                  borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+                  onPressed: () => _chiediLineaManuale(index),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(CupertinoIcons.add, size: 14, color: AppleColors.systemBlue),
+                      const SizedBox(width: 4),
+                      Text('Altra linea', style: AppleTypography.footnote(context).copyWith(color: AppleColors.systemBlue)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+          // Mostra ordine di priorità
+          if (step.priorityOrder.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(CupertinoIcons.arrow_right_arrow_left, size: 13, color: AppleColors.systemBlue),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    isFirst ? '1° Tratta (Partenza)' : '$index° Cambio',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-
-            // Fermate da visionare
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Fermate da visionare:',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () => _aggiungiFermata(index),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Aggiungi fermata'),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                ),
-              ],
-            ),
-            if (step.stopIds.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Nessuna fermata selezionata. Premi "+ Aggiungi fermata" per sceglierne una o più.',
-                  style: TextStyle(color: scheme.error, fontSize: 12),
-                ),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final stopId in step.stopIds)
-                    _buildStopChip(index, stopId, theme, scheme),
-                ],
-              ),
-            const SizedBox(height: 16),
-
-            // Mezzi / Linee da visionare
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Mezzi / Linee da visionare:',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (step.lineNames.length > 1)
-                  TextButton.icon(
-                    onPressed: () => _apriDialogPriorita(index),
-                    icon: const Icon(Icons.drag_indicator, size: 16),
-                    label: const Text('Ordina priorità'),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  ),
-              ],
-            ),
-            if (step.lineNames.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Aggiungi una fermata per selezionare automaticamente le linee in transito.',
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                ),
-              )
-            else
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final line in step.lineNames)
-                    FilterChip(
-                      selected: true,
-                      label: Text(line),
-                      onSelected: (_) {
-                        setState(() {
-                          step.lineNames.remove(line);
-                          step.priorityOrder.remove(line);
-                        });
-                      },
-                    ),
-                  ActionChip(
-                    avatar: const Icon(Icons.add, size: 16),
-                    label: const Text('Altra linea'),
-                    onPressed: () => _chiediLineaManuale(index),
-                  ),
-                ],
-              ),
-
-            // Mostra ordine di priorità
-            if (step.priorityOrder.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Icon(Icons.low_priority, size: 14, color: scheme.primary),
-                  const SizedBox(width: 6),
-                  Text(
                     'Priorità arrivi: ${step.priorityOrder.join(" ➔ ")}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11,
-                      color: scheme.primary,
+                      color: AppleColors.systemBlue,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -484,40 +534,60 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
     final name = step.nameFor(stopId);
     final isPreferenziale = step.preferenzialeStopId == stopId;
 
-    return Chip(
-      avatar: IconButton(
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        icon: Icon(
-          isPreferenziale ? Icons.star : Icons.star_border,
-          color: isPreferenziale ? Colors.amber[700] : scheme.onSurfaceVariant,
-          size: 18,
-        ),
-        tooltip: isPreferenziale ? 'Fermata preferenziale' : 'Imposta come preferenziale',
-        onPressed: () {
-          setState(() {
-            step.preferenzialeStopId = stopId;
-          });
-        },
-      ),
-      label: Text(
-        '$name ($code)${isPreferenziale ? " ⭐" : ""}',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: isPreferenziale ? FontWeight.bold : FontWeight.normal,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isPreferenziale
+            ? AppleColors.systemOrange.withValues(alpha: 0.12)
+            : AppleColors.tertiarySystemGroupedBackground(context),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
+        border: Border.all(
+          color: isPreferenziale
+              ? AppleColors.systemOrange.withValues(alpha: 0.35)
+              : AppleColors.separator(context),
+          width: 0.5,
         ),
       ),
-      deleteIcon: const Icon(Icons.close, size: 16),
-      onDeleted: () {
-        setState(() {
-          step.stopIds.remove(stopId);
-          step.stopCodes.remove(stopId);
-          step.stopNames.remove(stopId);
-          if (step.preferenzialeStopId == stopId) {
-            step.preferenzialeStopId = step.stopIds.firstOrNull;
-          }
-        });
-      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                step.preferenzialeStopId = stopId;
+              });
+            },
+            child: Icon(
+              isPreferenziale ? CupertinoIcons.star_fill : CupertinoIcons.star,
+              color: isPreferenziale ? AppleColors.systemOrange : AppleColors.secondaryLabel(context),
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$name ($code)',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isPreferenziale ? FontWeight.bold : FontWeight.normal,
+              color: AppleColors.label(context),
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                step.stopIds.remove(stopId);
+                step.stopCodes.remove(stopId);
+                step.stopNames.remove(stopId);
+                if (step.preferenzialeStopId == stopId) {
+                  step.preferenzialeStopId = step.stopIds.firstOrNull;
+                }
+              });
+            },
+            child: Icon(CupertinoIcons.xmark, size: 13, color: AppleColors.secondaryLabel(context)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -525,45 +595,42 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
     final step = _steps[fromIndex];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Card(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Row(
-            children: [
-              const Icon(Icons.directions_walk, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Tempo stimato per raggiungere la fermata successiva:',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: AppGroupedCard(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        color: AppleColors.secondarySystemGroupedBackground(context),
+        child: Row(
+          children: [
+            const Icon(Icons.directions_walk, size: 18, color: AppleColors.systemBlue),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tempo stimato per raggiungere la fermata successiva:',
+                style: AppleTypography.footnote(context).copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              DropdownButton<int>(
-                value: step.transferMinutes,
-                underline: const SizedBox(),
-                items: [2, 4, 5, 7, 10, 15, 20].map((min) {
-                  return DropdownMenuItem<int>(
-                    value: min,
-                    child: Text(
-                      '$min min',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => step.transferMinutes = val);
-                  }
-                },
-              ),
-            ],
-          ),
+            ),
+            DropdownButton<int>(
+              value: step.transferMinutes,
+              underline: const SizedBox(),
+              items: [2, 4, 5, 7, 10, 15, 20].map((min) {
+                return DropdownMenuItem<int>(
+                  value: min,
+                  child: Text(
+                    '$min min',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => step.transferMinutes = val);
+                }
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -573,23 +640,24 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
     final ctrl = TextEditingController();
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Aggiungi mezzo / linea'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(
-            labelText: 'Nome o numero linea',
-            hintText: 'Es. 55, 68, 10N, STAR 1',
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CupertinoTextField(
+            controller: ctrl,
+            placeholder: 'Es. 55, 68, 10N, STAR 1',
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
           ),
-          autofocus: true,
-          textCapitalization: TextCapitalization.characters,
         ),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Annulla'),
           ),
-          FilledButton(
+          CupertinoDialogAction(
+            isDefaultAction: true,
             onPressed: () {
               final nome = ctrl.text.trim().toUpperCase();
               if (nome.isNotEmpty) {
@@ -616,6 +684,10 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      backgroundColor: AppleColors.secondarySystemGroupedBackground(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return Padding(
@@ -626,23 +698,24 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.drag_indicator),
+                    const Icon(CupertinoIcons.arrow_up_arrow_down, size: 20, color: AppleColors.systemBlue),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'Trascina per ordinare la priorità',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: AppleTypography.headline(context),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'I mezzi in alto avranno la precedenza nella visualizzazione degli arrivi.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: AppleTypography.footnote(context),
                 ),
                 const SizedBox(height: 12),
                 Flexible(
                   child: ReorderableListView(
                     shrinkWrap: true,
+                    // ignore: deprecated_member_use
                     onReorder: (oldIndex, newIndex) {
                       setModalState(() {
                         if (oldIndex < newIndex) newIndex -= 1;
@@ -657,12 +730,22 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
                       for (final l in items)
                         ListTile(
                           key: ValueKey(l),
-                          leading: const Icon(Icons.reorder),
+                          leading: const Icon(CupertinoIcons.line_horizontal_3, size: 20),
                           title: Text(
                             'Linea $l',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: AppleTypography.callout(context).copyWith(fontWeight: FontWeight.w600),
                           ),
-                          trailing: Chip(label: Text(l)),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppleColors.systemBlue.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              l,
+                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppleColors.systemBlue, fontSize: 12),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -670,7 +753,8 @@ class _JourneyEditorScreenState extends State<JourneyEditorScreen> {
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: FilledButton(
+                  child: CupertinoButton.filled(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     onPressed: () => Navigator.pop(ctx),
                     child: const Text('Fatto'),
                   ),
