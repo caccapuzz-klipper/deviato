@@ -1418,9 +1418,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
       effettivo = await widget.repo.loadLine(line);
-      if (mounted) Navigator.pop(context);
+      if (!context.mounted) return;
+      Navigator.pop(context);
     }
-    if (effettivo == null || !mounted) return;
+    if (effettivo == null || !context.mounted) return;
 
     showModalBottomSheet<void>(
       context: context,
@@ -1840,7 +1841,7 @@ class _CardLineaSalvataConFermateState
                       : ListView.separated(
                           shrinkWrap: true,
                           itemCount: fermateFiltrate.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1, indent: 40),
+                          separatorBuilder: (_, _) => const Divider(height: 1, indent: 40),
                           itemBuilder: (context, i) {
                             final f = fermateFiltrate[i];
                             final isSkipped = skippedIds.contains(f.id);
@@ -2006,7 +2007,7 @@ class _OrariFermateLineaSheetState extends State<_OrariFermateLineaSheet> {
               ? const Center(child: Text('Nessuna fermata registrata'))
               : ListView.separated(
                   itemCount: fermate.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
+                  separatorBuilder: (_, _) => const Divider(height: 1, indent: 56),
                   itemBuilder: (context, i) {
                     final f = fermate[i];
                     final isSkipped = skippedIds.contains(f.id);
@@ -2463,7 +2464,7 @@ class _FermateVicineSheetState extends State<_FermateVicineSheet> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: _fermate.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, indent: 64),
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 64),
       itemBuilder: (context, i) {
         final item = _fermate[i];
         final f = item.fermata;
@@ -2711,7 +2712,7 @@ class _ScioperoDettaglioSheet extends StatelessWidget {
         const SizedBox(height: 12),
         Card(
           elevation: 0,
-          color: theme.colorScheme.errorContainer.withOpacity(0.5),
+          color: AppleColors.systemRed.withValues(alpha: 0.08),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
