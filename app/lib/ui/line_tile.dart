@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/deviation_service.dart';
 import '../core/models/transit.dart';
 import '../core/pipeline/closure_summary.dart';
+import 'apple_theme.dart';
 import 'line_badge.dart';
 import 'theme.dart';
 
@@ -240,9 +242,11 @@ class LineTile extends StatelessWidget {
       // la linea sa gia' dove va: quello che non sa e' se oggi devia.
       title: titolo,
       subtitle: sottotitolo,
-      // Niente pulsanti a destra: tutta la riga si tocca, e aggiornare
-      // una linea sola non ha piu' senso — scaricarle tutte costa un
-      // secondo, e il calcolo lo fa il job su GitHub.
+      trailing: Icon(
+        CupertinoIcons.chevron_forward,
+        size: 14,
+        color: AppleColors.tertiaryLabel(context),
+      ),
     );
   }
 
