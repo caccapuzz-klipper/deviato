@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../core/deviation_service.dart';
 import '../core/models/notice.dart';
 import '../core/pipeline/closure_summary.dart';
+import 'apple_theme.dart';
 import 'quando_avviso.dart';
 import 'riassunto.dart';
 
@@ -127,7 +129,6 @@ class _SchedaMappaState extends State<SchedaMappa> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final pagine = _pagine;
     // Una pagina sparita (un avviso tolto, un'altra direzione scelta):
     // si torna al riepilogo.
@@ -183,11 +184,22 @@ class _SchedaMappaState extends State<SchedaMappa> {
 
     return _Misura(
       onMisura: (s) => widget.onAltezza?.call(s.height),
-      child: Material(
-        color: scheme.surface,
-        elevation: 6,
-        shadowColor: Colors.black,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppleColors.secondarySystemGroupedBackground(context),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: AppleColors.separator(context),
+            width: 0.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
         clipBehavior: Clip.antiAlias,
         child: AnimatedSize(
           duration: const Duration(milliseconds: 220),
@@ -246,7 +258,11 @@ class _SchedaMappaState extends State<SchedaMappa> {
                 ),
               ),
               if (widget.comandi != null) ...[
-                Divider(height: 1, thickness: 1, color: scheme.outlineVariant),
+                Divider(
+                  height: 0.5,
+                  thickness: 0.5,
+                  color: AppleColors.separator(context),
+                ),
                 widget.comandi!,
               ],
             ],
@@ -272,7 +288,6 @@ class _Ridotta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Semantics(
       button: true,
       label: 'Mostra i dettagli',
@@ -292,14 +307,18 @@ class _Ridotta extends StatelessWidget {
               ),
               Text(
                 'Dettagli',
-                style: TextStyle(
-                  fontSize: 14,
+                style: AppleTypography.subheadline(context).copyWith(
                   fontWeight: FontWeight.w600,
-                  color: scheme.onSurfaceVariant,
+                  color: AppleColors.secondaryLabel(context),
                 ),
               ),
-              Icon(Icons.expand_less, color: scheme.onSurfaceVariant),
-              const SizedBox(width: 10),
+              const SizedBox(width: 4),
+              Icon(
+                CupertinoIcons.chevron_up,
+                size: 14,
+                color: AppleColors.secondaryLabel(context),
+              ),
+              const SizedBox(width: 14),
             ],
           ),
         ),
@@ -308,8 +327,7 @@ class _Ridotta extends StatelessWidget {
   }
 }
 
-/// Le etichette delle pagine, in cima alla scheda. Alte 44 punti da
-/// toccare, anche se la pillola disegnata e' piu' bassa.
+/// Le etichette delle pagine, in cima alla scheda.
 class _Etichette extends StatelessWidget {
   const _Etichette({
     required this.pagine,
@@ -329,62 +347,81 @@ class _Etichette extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     String nome(_Pagina p) => switch (p) {
       _Pagina.riepilogo => 'Riepilogo',
       _Pagina.fermate => 'Fermate',
       _Pagina.avvisi => avvisi > 1 ? 'Avvisi · $avvisi' : 'Avviso',
     };
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      padding: const EdgeInsets.fromLTRB(10, 8, 8, 4),
       child: Row(
         children: [
-          for (final p in pagine)
-            Expanded(
-              child: Semantics(
-                selected: p == scelta,
-                button: true,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(22),
-                  onTap: () => onScelta(p),
-                  child: SizedBox(
-                    height: 44,
-                    child: Center(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        height: 34,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: p == scelta
-                              ? scheme.onSurface
-                              : scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(17),
-                        ),
-                        child: Text(
-                          nome(p),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: p == scelta
-                                ? scheme.surface
-                                : scheme.onSurfaceVariant,
+          Expanded(
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: AppleColors.tertiarySystemGroupedBackground(context),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  for (final p in pagine)
+                    Expanded(
+                      child: Semantics(
+                        selected: p == scelta,
+                        button: true,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onScelta(p),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: p == scelta
+                                  ? AppleColors.secondarySystemGroupedBackground(context)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: p == scelta
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.06),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Text(
+                              nome(p),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppleTypography.footnote(context).copyWith(
+                                fontWeight: p == scelta ? FontWeight.w600 : FontWeight.w500,
+                                color: p == scelta
+                                    ? AppleColors.label(context)
+                                    : AppleColors.secondaryLabel(context),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                ],
               ),
             ),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             onPressed: onRiduci,
             tooltip: 'Riduci la scheda',
-            icon: const Icon(Icons.expand_more),
-            color: scheme.onSurfaceVariant,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            icon: Icon(
+              CupertinoIcons.chevron_down,
+              size: 16,
+              color: AppleColors.secondaryLabel(context),
+            ),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            padding: EdgeInsets.zero,
           ),
         ],
       ),
@@ -425,7 +462,14 @@ class _Avvisi extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < avvisi.length; i++) ...[
-          if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+          if (i > 0)
+            Divider(
+              height: 0.5,
+              thickness: 0.5,
+              indent: 16,
+              endIndent: 16,
+              color: AppleColors.separator(context),
+            ),
           _Avviso(notice: avvisi[i], ora: status.checkedAt),
         ],
       ],
@@ -449,8 +493,6 @@ class _AvvisoState extends State<_Avviso> {
   @override
   Widget build(BuildContext context) {
     final n = widget.notice;
-    final testo = Theme.of(context).textTheme;
-    final tenue = Theme.of(context).colorScheme.onSurfaceVariant;
     // I testi del feed hanno doppi spazi a caso: le parole restano quelle.
     final corpo = n.text.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
     final titolo = n.headline != null && n.headline!.trim().isNotEmpty
@@ -460,18 +502,25 @@ class _AvvisoState extends State<_Avviso> {
     final lungo = corpo.length > 160;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (titolo != null)
-            Text(titolo, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              titolo,
+              style: AppleTypography.subheadline(context).copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           if (quando.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 quando,
-                style: testo.bodySmall?.copyWith(color: tenue),
+                style: AppleTypography.caption1(context).copyWith(
+                  color: AppleColors.secondaryLabel(context),
+                ),
               ),
             ),
           const SizedBox(height: 4),
@@ -479,16 +528,21 @@ class _AvvisoState extends State<_Avviso> {
             corpo,
             maxLines: _aperto || !lungo ? null : 3,
             overflow: _aperto || !lungo ? null : TextOverflow.ellipsis,
+            style: AppleTypography.subheadline(context),
           ),
           if (lungo)
-            TextButton(
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(64, 44),
-                alignment: Alignment.centerLeft,
-              ),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              minimumSize: Size.zero,
+              alignment: Alignment.centerLeft,
               onPressed: () => setState(() => _aperto = !_aperto),
-              child: Text(_aperto ? 'Mostra meno' : 'Testo completo'),
+              child: Text(
+                _aperto ? 'Mostra meno' : 'Testo completo',
+                style: AppleTypography.footnote(context).copyWith(
+                  color: AppleColors.systemBlue,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             )
           else
             const SizedBox(height: 8),
