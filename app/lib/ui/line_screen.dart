@@ -1,3 +1,6 @@
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/deviation_service.dart';
@@ -8,6 +11,7 @@ import '../core/pipeline/stop_impact.dart';
 import '../core/text/display_names.dart';
 import '../core/text/periodo_avviso.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'full_map_screen.dart';
 import 'line_badge.dart';
 import 'line_map.dart';
@@ -15,7 +19,6 @@ import 'live_watch_card.dart';
 import 'quando_avviso.dart';
 import 'riassunto.dart';
 import 'stop_screen.dart';
-import 'theme.dart';
 
 /// Il dettaglio di una linea: cosa succede, dove, e cosa fare.
 ///
@@ -97,6 +100,10 @@ class _LineScreenState extends State<LineScreen> {
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
+    backgroundColor: AppleColors.secondarySystemGroupedBackground(context),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
     builder: (sheet) => ListenableBuilder(
       listenable: widget.repo,
       builder: (sheet, _) {
@@ -223,24 +230,26 @@ class _LineScreenState extends State<LineScreen> {
     final checking = widget.repo.isRefreshingAll;
     final osservando = widget.repo.isWatching(widget.line.routeId);
     final esito = widget.repo.watchResultOf(widget.line.routeId);
-    final testo = Theme.of(context).textTheme;
-    final secondario = Theme.of(context).colorScheme.onSurfaceVariant;
-
     final attivi = _perAvviso(status.activeReports);
     final futuri = _perAvviso(status.scheduledReports);
     final altriOrari = _perAvviso(status.otherTimeReports);
     final finiti = _perAvviso(status.endedReports);
 
     return Scaffold(
+      backgroundColor: AppleColors.systemGroupedBackground(context),
       appBar: AppBar(
         titleSpacing: 0,
+        backgroundColor: AppleColors.systemBackground(context).withValues(alpha: 0.85),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: Row(
           children: [
-            LineBadge(line: status.line, height: 30),
+            LineBadge(line: status.line, height: 28),
             const SizedBox(width: 10),
             Flexible(
               child: Text(
                 'Linea ${status.line.shortName}',
+                style: AppleTypography.headline(context),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -253,40 +262,41 @@ class _LineScreenState extends State<LineScreen> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 18),
               child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                ),
+                child: CupertinoActivityIndicator(radius: 9),
               ),
             )
           else if (widget.repo.offline)
             IconButton(
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(CupertinoIcons.arrow_clockwise),
               tooltip: 'Riprova',
               onPressed: widget.repo.refreshAll,
             ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(24),
-          child: Padding(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: AppleColors.separator(context),
+                  width: 0.5,
+                ),
+              ),
+            ),
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Align(
               alignment: Alignment.centerLeft,
-              // I capolinea come li scrive il nome lungo della linea
-              // («via Massari - piazza XVIII Dicembre»), non il
-              // headsign in maiuscolo di una direzione sola.
-              // Prima l'ora, che e' corta: se la riga si tronca, si
-              // perde la fine del percorso e non l'ora. Il
-              // qualificatore («circolare Tram Storici, …») resta
-              // fuori: e' un dettaglio, e rubava la riga.
               child: Text(
                 [
                   if (_checkedLabel.isNotEmpty) _maiuscola(_checkedLabel),
                   if (status.line.longName != null)
                     DisplayNames.routeParts(status.line.longName!).route,
                 ].join('  ·  '),
-                style: testo.bodySmall?.copyWith(color: secondario),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppleColors.secondaryLabel(context),
+                  letterSpacing: -0.1,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -302,6 +312,7 @@ class _LineScreenState extends State<LineScreen> {
         onPressed: _apriMezzi,
       ),
       body: RefreshIndicator(
+        color: AppleColors.systemBlue,
         onRefresh: widget.repo.refreshAll,
         child: ListView(
           // Spazio in fondo per il pulsante dei mezzi, che fluttua sopra.
@@ -407,16 +418,74 @@ class _PulsanteMezzi extends StatelessWidget {
     } else {
       testo = 'Segui i mezzi';
     }
-    return FloatingActionButton.extended(
-      onPressed: onPressed,
-      icon: osservando
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            )
-          : const Icon(Icons.visibility_outlined),
-      label: Text(testo),
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xCC2C2C2E)
+                    : const Color(0xE6FFFFFF),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppleColors.separator(context),
+                  width: 0.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (osservando)
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppleColors.systemBlue),
+                      ),
+                    )
+                  else
+                    Icon(
+                      esito
+                          ? CupertinoIcons.checkmark_alt_circle
+                          : CupertinoIcons.eye,
+                      size: 18,
+                      color: AppleColors.systemBlue,
+                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    testo,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppleColors.label(context),
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -428,8 +497,11 @@ class _Intestazione extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-    child: Text(testo, style: Theme.of(context).textTheme.titleSmall),
+    padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+    child: Text(
+      testo.toUpperCase(),
+      style: AppleTypography.sectionHeader(context),
+    ),
   );
 }
 
@@ -443,15 +515,39 @@ class _AvvisiRaccolti extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: ExpansionTile(
-        leading: const Icon(Icons.article_outlined),
-        title: Text('$count avvisi di GTT'),
-        subtitle: const Text('Testi originali'),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        childrenPadding: const EdgeInsets.only(bottom: 12),
-        children: children,
+      padding: const EdgeInsets.only(top: 8),
+      child: AppGroupedCard(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.zero,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            leading: Icon(
+              CupertinoIcons.doc_on_doc,
+              size: 20,
+              color: AppleColors.systemBlue,
+            ),
+            title: Text(
+              '$count avvisi di GTT',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                color: AppleColors.label(context),
+              ),
+            ),
+            subtitle: Text(
+              'Testi originali',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppleColors.secondaryLabel(context),
+              ),
+            ),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            childrenPadding: const EdgeInsets.only(bottom: 12),
+            children: children,
+          ),
+        ),
       ),
     );
   }
@@ -518,9 +614,9 @@ class _ReportCard extends StatelessWidget {
     );
     final piuDirezioni = conEffetto.length > 1;
 
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      clipBehavior: Clip.antiAlias,
+    return AppGroupedCard(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -538,7 +634,12 @@ class _ReportCard extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Text(
                   'Verso ${_verso(r.shape, status.line)}',
-                  style: Theme.of(context).textTheme.labelLarge,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppleColors.label(context),
+                    letterSpacing: -0.2,
+                  ),
                 ),
               ),
             _SkippedStops(stops: r.skippedStops),
@@ -546,11 +647,14 @@ class _ReportCard extends StatelessWidget {
           if (!finito &&
               conEffetto.isEmpty &&
               reports.any((r) => r.impact != null))
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Text(
-                'Il percorso cambia, ma tutte le fermate '
-                'restano servite.',
+                'Il percorso cambia, ma tutte le fermate restano servite.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppleColors.label(context),
+                ),
               ),
             ),
 
@@ -589,29 +693,42 @@ class _StrisciaQuando extends StatelessWidget {
     if (testo.isEmpty) return const SizedBox.shrink();
     final finito = stato == StatoPeriodo.finito;
     final colore = finito
-        ? Theme.of(context).colorScheme.onSurfaceVariant
-        : StatusColors.of(context).info;
+        ? AppleColors.secondaryLabel(context)
+        : AppleColors.systemBlue;
 
     return Container(
       width: double.infinity,
-      color: colore.withValues(alpha: 0.12),
+      decoration: BoxDecoration(
+        color: colore.withValues(alpha: 0.08),
+        border: Border(
+          bottom: BorderSide(
+            color: AppleColors.separator(context),
+            width: 0.5,
+          ),
+        ),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           Icon(
             switch (stato) {
-              StatoPeriodo.finito => Icons.history,
-              StatoPeriodo.fuoriOrario => Icons.schedule,
-              _ => Icons.event_outlined,
+              StatoPeriodo.finito => CupertinoIcons.clock,
+              StatoPeriodo.fuoriOrario => CupertinoIcons.time,
+              _ => CupertinoIcons.calendar,
             },
-            size: 18,
+            size: 16,
             color: colore,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               testo,
-              style: TextStyle(color: colore, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: colore,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
         ],
@@ -627,26 +744,25 @@ class _Affidabilita extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colori = StatusColors.of(context);
-    final secondario = Theme.of(context).colorScheme.onSurfaceVariant;
+    final secondary = AppleColors.secondaryLabel(context);
     final (
       Color colore,
       IconData icon,
       String label,
     ) = switch (report.confidence) {
       Confidence.confermata => (
-        colori.ok,
-        Icons.verified_outlined,
+        AppleColors.systemGreen,
+        CupertinoIcons.checkmark_seal_fill,
         'Verificato',
       ),
       Confidence.probabile => (
-        colori.warning,
-        Icons.help_outline,
+        AppleColors.systemOrange,
+        CupertinoIcons.question_circle_fill,
         'Da confermare',
       ),
       Confidence.soloTesto => (
-        secondario,
-        Icons.article_outlined,
+        secondary,
+        CupertinoIcons.doc_text,
         'Solo il testo di GTT',
       ),
     };
@@ -654,15 +770,16 @@ class _Affidabilita extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
+        color: AppleColors.secondarySystemGroupedBackground(context).withValues(alpha: 0.5),
         border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+          top: BorderSide(color: AppleColors.separator(context), width: 0.5),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: colore),
+          Icon(icon, size: 15, color: colore),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -674,6 +791,7 @@ class _Affidabilita extends StatelessWidget {
                     color: colore,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
+                    letterSpacing: -0.1,
                   ),
                 ),
                 if (report.whyIncomplete != null)
@@ -681,9 +799,11 @@ class _Affidabilita extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       report.whyIncomplete!,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: secondario),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: secondary,
+                        letterSpacing: -0.1,
+                      ),
                     ),
                   ),
               ],
@@ -702,12 +822,11 @@ class _SkippedStops extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final piccolo = Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
-    // «in linea d'aria» si dice una volta, sotto, e non a ogni riga: sulla
-    // 10N era ripetuto tre volte per scheda, sedici schede.
+    final piccolo = TextStyle(
+      fontSize: 13,
+      color: AppleColors.secondaryLabel(context),
+      letterSpacing: -0.1,
+    );
     final tutteInLineaDAria = stops
         .expand((s) => s.alternatives)
         .every((a) => a.walkingMeters == null);
@@ -718,28 +837,41 @@ class _SkippedStops extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            stops.length == 1
-                ? '1 fermata non servita'
-                : '${stops.length} fermate non servite',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: scheme.error),
+          Row(
+            children: [
+              Icon(
+                CupertinoIcons.slash_circle,
+                size: 16,
+                color: AppleColors.systemRed,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                stops.length == 1
+                    ? '1 fermata non servita'
+                    : '${stops.length} fermate non servite',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppleColors.systemRed,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           for (final s in stops) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 1),
+                  padding: const EdgeInsets.only(top: 4),
                   child: Icon(
-                    Icons.do_not_disturb_on_outlined,
-                    size: 18,
-                    color: scheme.error,
+                    CupertinoIcons.circle_fill,
+                    size: 7,
+                    color: AppleColors.systemRed,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -749,8 +881,10 @@ class _SkippedStops extends StatelessWidget {
                           children: [
                             TextSpan(
                               text: DisplayNames.stop(s.stop),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: AppleColors.label(context),
                               ),
                             ),
                             // Il numero sul palo: serve a riconoscerla.
@@ -769,8 +903,12 @@ class _SkippedStops extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 4),
                           child: Row(
                             children: [
-                              const Icon(Icons.directions_walk, size: 15),
-                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.directions_walk,
+                                size: 14,
+                                color: AppleColors.secondaryLabel(context),
+                              ),
+                              const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
                                   // Il numero sul palo: due pali della
@@ -786,7 +924,7 @@ class _SkippedStops extends StatelessWidget {
                                       ? " a piedi"
                                       : " in linea d'aria"}'
                                   '${alt.sameLine ? "" : " · altre linee"}',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                                  style: piccolo,
                                 ),
                               ),
                             ],
@@ -847,8 +985,11 @@ class _OriginalTextState extends State<_OriginalText> {
   Widget build(BuildContext context) {
     final report = widget.report;
     final n = report.notice;
-    final piccolo = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    final secondary = AppleColors.secondaryLabel(context);
+    final piccolo = TextStyle(
+      fontSize: 12,
+      color: secondary,
+      letterSpacing: -0.1,
     );
     // I testi del feed hanno doppi spazi a caso («non transita  alla
     // fermata  422»): si tolgono, le parole restano quelle di GTT.
@@ -857,29 +998,41 @@ class _OriginalTextState extends State<_OriginalText> {
     final chiuso = lungo && !_espanso;
     final motivo = DisplayNames.reason(n.reason);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Testo originale',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          Row(
+            children: [
+              Icon(CupertinoIcons.doc_plaintext, size: 14, color: AppleColors.systemBlue),
+              const SizedBox(width: 6),
+              Text(
+                'Testo originale',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppleColors.systemBlue,
+                  letterSpacing: -0.1,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           if (n.headline != null && n.headline!.isNotEmpty)
-            Text(
-              n.headline!,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                n.headline!,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppleColors.label(context),
+                  letterSpacing: -0.2,
+                ),
+              ),
             ),
           // Chiuso si vedono quattro righe sfumate in fondo: si capisce
           // che continua senza doverlo scrivere.
-          //
-          // La sfumatura e' una maschera (dstIn: conta solo l'opacita'),
-          // non un colore. Prima il gradiente era nero e si fondeva col
-          // testo: in chiaro non si notava, in modalita' scura il testo
-          // diventava nero su fondo scuro, cioe' illeggibile.
           if (chiuso)
             ShaderMask(
               blendMode: BlendMode.dstIn,
@@ -893,22 +1046,40 @@ class _OriginalTextState extends State<_OriginalText> {
                 ],
                 stops: const [0, 0.62, 1],
               ).createShader(r),
-              child: Text(corpo, maxLines: 4, overflow: TextOverflow.clip),
+              child: Text(
+                corpo,
+                maxLines: 4,
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: AppleColors.label(context),
+                ),
+              ),
             )
           else
-            Text(corpo),
+            Text(
+              corpo,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: AppleColors.label(context),
+              ),
+            ),
           if (lungo)
             Align(
               alignment: Alignment.centerLeft,
-              // L'area di tocco resta alta 44 punti anche se la scritta e'
-              // piccola: prima era stretta attorno al testo, venti punti.
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 0),
-                  minimumSize: const Size(64, 44),
-                ),
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 6),
                 onPressed: () => setState(() => _espanso = !_espanso),
-                child: Text(chiuso ? 'Leggi tutto' : 'Mostra meno'),
+                child: Text(
+                  chiuso ? 'Leggi tutto' : 'Mostra meno',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppleColors.systemBlue,
+                  ),
+                ),
               ),
             ),
           // Quando GTT pubblica la stessa variazione in due posti se ne
@@ -929,6 +1100,7 @@ class _OriginalTextState extends State<_OriginalText> {
               padding: const EdgeInsets.only(top: 6),
               child: Text('Motivo: $motivo', style: piccolo),
             ),
+          const SizedBox(height: 2),
           if (n.endToShow case final fine?)
             Text('Fino al ${_data(fine)}/${fine.year}', style: piccolo)
           else
