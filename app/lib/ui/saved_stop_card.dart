@@ -31,15 +31,16 @@ class SavedStopsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nome = line.longName;
-    return Container(
+    return Card(
       margin: const EdgeInsets.symmetric(
         horizontal: AppleSizes.marginHorizontal,
         vertical: 4,
       ),
-      decoration: BoxDecoration(
-        color: AppleColors.secondarySystemGroupedBackground(context),
+      elevation: 0,
+      color: AppleColors.secondarySystemGroupedBackground(context),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppleSizes.radiusCard),
-        border: Border.all(
+        side: BorderSide(
           color: AppleColors.separator(context),
           width: 0.5,
         ),
@@ -255,9 +256,9 @@ class SavedStopRow extends StatelessWidget {
               if (onOpenArrivals != null)
                 IconButton(
                   icon: Icon(
-                    CupertinoIcons.clock,
+                    Icons.departure_board_outlined,
                     color: AppleColors.systemBlue,
-                    size: 20,
+                    size: 22,
                   ),
                   tooltip: 'Arrivi in tempo reale',
                   onPressed: onOpenArrivals,
