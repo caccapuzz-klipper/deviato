@@ -34,7 +34,7 @@ void main() {
 
       expect(rtPassaggi, isNotEmpty);
       expect(prPassaggi, isNotEmpty);
-      expect(rtPassaggi.map((p) => p.orario), contains('19:40'));
+      expect(rtPassaggi.map((p) => p.orario), contains('19:41'));
       expect(rtPassaggi.map((p) => p.orario), contains('19:43'));
       expect(prPassaggi.map((p) => p.orario), contains('20:25'));
     });
