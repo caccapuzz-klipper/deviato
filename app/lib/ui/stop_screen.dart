@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models/saved_stop.dart';
@@ -9,6 +10,7 @@ import '../core/pipeline/stop_search.dart';
 import '../core/sources/trip_updates_gtt.dart';
 import '../core/text/display_names.dart';
 import '../data/app_repository.dart';
+import 'apple_theme.dart';
 import 'line_badge.dart';
 import 'theme.dart';
 
@@ -141,22 +143,25 @@ class _StopScreenState extends State<StopScreen> {
     final stopCode = widget.stop.code ?? widget.stop.id;
 
     return Scaffold(
+      backgroundColor: AppleColors.systemGroupedBackground(context),
       appBar: AppBar(
+        titleSpacing: 16,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        backgroundColor: AppleColors.systemBackground(context).withValues(alpha: 0.85),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               stopName,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: AppleTypography.headline(context),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             if (stopCode.isNotEmpty)
               Text(
                 'Palina $stopCode',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: AppleTypography.caption1(context),
               ),
           ],
         ),
@@ -164,17 +169,18 @@ class _StopScreenState extends State<StopScreen> {
           IconButton(
             icon: _loading
                 ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    width: 18,
+                    height: 18,
+                    child: CupertinoActivityIndicator(radius: 8),
                   )
-                : const Icon(Icons.refresh),
+                : const Icon(CupertinoIcons.arrow_clockwise),
             tooltip: 'Aggiorna arrivi',
             onPressed: _loading ? null : _carica,
           ),
         ],
       ),
       body: RefreshIndicator(
+        color: AppleColors.systemBlue,
         onRefresh: _carica,
         child: _buildBody(theme, statusColors),
       ),
@@ -183,7 +189,7 @@ class _StopScreenState extends State<StopScreen> {
 
   Widget _buildBody(ThemeData theme, StatusColors statusColors) {
     if (_loading && _arrivi == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CupertinoActivityIndicator(radius: 14));
     }
 
     if (_errore != null && _arrivi == null) {
@@ -193,18 +199,22 @@ class _StopScreenState extends State<StopScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.wifi_off_rounded, size: 56, color: theme.colorScheme.error),
+              const Icon(
+                CupertinoIcons.wifi_slash,
+                size: 48,
+                color: AppleColors.systemRed,
+              ),
               const SizedBox(height: 16),
               Text(
                 _errore!,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyLarge,
+                style: AppleTypography.body(context),
               ),
               const SizedBox(height: 20),
-              FilledButton.icon(
+              CupertinoButton.filled(
                 onPressed: _carica,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Riprova'),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                child: const Text('Riprova'),
               ),
             ],
           ),
@@ -219,53 +229,55 @@ class _StopScreenState extends State<StopScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
-        // Intestazione fermata
-        Card(
-          elevation: 0,
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        // Intestazione fermata in Apple style
+        AppGroupedCard(
           margin: const EdgeInsets.only(bottom: 16),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(Icons.signpost_outlined, color: theme.colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        arrivi != null && arrivi.stopCode.isNotEmpty
-                            ? 'Palina ${arrivi.stopCode}'
-                            : (widget.stop.code != null && widget.stop.code!.isNotEmpty
-                                ? 'Palina ${widget.stop.code}'
-                                : 'Fermata ${widget.stop.name}'),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Linee in transito: ${linee.length}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppleColors.systemBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                Text(
-                  'Agg. ${_oraRif.hour.toString().padLeft(2, '0')}:${_oraRif.minute.toString().padLeft(2, '0')}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                child: const Icon(
+                  CupertinoIcons.placemark,
+                  size: 20,
+                  color: AppleColors.systemBlue,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      arrivi != null && arrivi.stopCode.isNotEmpty
+                          ? 'Palina ${arrivi.stopCode}'
+                          : (widget.stop.code != null && widget.stop.code!.isNotEmpty
+                              ? 'Palina ${widget.stop.code}'
+                              : 'Fermata ${widget.stop.name}'),
+                      style: AppleTypography.headline(context),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Linee in transito: ${linee.length}',
+                      style: AppleTypography.subheadline(context),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Agg. ${_oraRif.hour.toString().padLeft(2, '0')}:${_oraRif.minute.toString().padLeft(2, '0')}',
+                style: AppleTypography.footnote(context),
+              ),
+            ],
           ),
         ),
 
-        if (_buildDeviazioniAvviso(theme, statusColors) case final card?)
-          card,
+        ?_buildDeviazioniAvviso(theme, statusColors),
 
         if (linee.isEmpty)
           Padding(
@@ -274,15 +286,15 @@ class _StopScreenState extends State<StopScreen> {
               child: Column(
                 children: [
                   Icon(
-                    Icons.schedule_outlined,
-                    size: 48,
-                    color: theme.colorScheme.outline,
+                    CupertinoIcons.clock,
+                    size: 44,
+                    color: AppleColors.secondaryLabel(context),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
                     'Nessun passaggio previsto nelle prossime ore.',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                    style: AppleTypography.body(context).copyWith(
+                      color: AppleColors.secondaryLabel(context),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -298,10 +310,7 @@ class _StopScreenState extends State<StopScreen> {
         Center(
           child: Text(
             'Orari in tempo reale e programmati da GTT S.p.A. · CC BY 4.0',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-              fontSize: 11,
-            ),
+            style: AppleTypography.footnote(context).copyWith(fontSize: 11),
             textAlign: TextAlign.center,
           ),
         ),
@@ -317,93 +326,67 @@ class _StopScreenState extends State<StopScreen> {
   ) {
     final tLine = _lineaPer(l.linea);
 
-    return Card(
-      elevation: 0,
+    return AppGroupedCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                LineBadge(line: tLine, height: 32),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              LineBadge(line: tLine, height: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.direzione.isNotEmpty ? l.direzione : (l.direzioneBreve ?? ''),
+                      style: AppleTypography.headline(context),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (l.direzioneBreve != null &&
+                        l.direzioneBreve != l.direzione &&
+                        l.direzioneBreve!.isNotEmpty)
                       Text(
-                        l.direzione.isNotEmpty ? l.direzione : (l.direzioneBreve ?? ''),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        l.direzioneBreve!,
+                        style: AppleTypography.caption1(context),
                       ),
-                      if (l.direzioneBreve != null &&
-                          l.direzioneBreve != l.direzione &&
-                          l.direzioneBreve!.isNotEmpty)
-                        Text(
-                          l.direzioneBreve!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
-                if (l.avviso)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColors.warning.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            size: 14, color: statusColors.warning),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Avviso',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: statusColors.warning,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              ),
+              if (l.avviso)
+                StatusPill(
+                  text: 'Avviso',
+                  color: AppleColors.systemOrange,
+                  icon: CupertinoIcons.exclamationmark_triangle_fill,
+                ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Divider(
+              height: 1,
+              thickness: 0.5,
+              color: AppleColors.separator(context),
+            ),
+          ),
+          if (l.passaggi.isEmpty)
+            Text(
+              'Nessun passaggio recente o pianificato.',
+              style: AppleTypography.subheadline(context),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in l.passaggi)
+                  _buildPassaggioChip(p, theme, statusColors),
               ],
             ),
-            const Divider(height: 20),
-            if (l.passaggi.isEmpty)
-              Text(
-                'Nessun passaggio recente o pianificato.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final p in l.passaggi)
-                    _buildPassaggioChip(p, theme, statusColors),
-                ],
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -418,22 +401,22 @@ class _StopScreenState extends State<StopScreen> {
     final isRt = p.isRealtime;
 
     final Color chipBg = isRt
-        ? statusColors.info.withValues(alpha: 0.12)
-        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5);
+        ? AppleColors.systemBlue.withValues(alpha: 0.10)
+        : AppleColors.tertiarySystemGroupedBackground(context);
 
     final Color chipBorder = isRt
-        ? statusColors.info.withValues(alpha: 0.4)
-        : theme.colorScheme.outlineVariant.withValues(alpha: 0.4);
+        ? AppleColors.systemBlue.withValues(alpha: 0.28)
+        : AppleColors.separator(context);
 
     final Color textColor =
-        isRt ? statusColors.info : theme.colorScheme.onSurface;
+        isRt ? AppleColors.systemBlue : AppleColors.label(context);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: chipBg,
-        border: Border.all(color: chipBorder),
-        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: chipBorder, width: 0.5),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusSm),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -449,9 +432,10 @@ class _StopScreenState extends State<StopScreen> {
               Text(
                 etichetta,
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                   fontSize: 14,
                   color: textColor,
+                  letterSpacing: -0.2,
                 ),
               ),
               if (min != null && min > 0 && min <= 45) ...[
@@ -460,7 +444,7 @@ class _StopScreenState extends State<StopScreen> {
                   '(${p.orario})',
                   style: TextStyle(
                     fontSize: 11,
-                    color: textColor.withValues(alpha: 0.8),
+                    color: textColor.withValues(alpha: 0.75),
                   ),
                 ),
               ],
@@ -471,8 +455,8 @@ class _StopScreenState extends State<StopScreen> {
             isRt ? 'in tempo reale' : 'programmato',
             style: TextStyle(
               fontSize: 10,
-              fontWeight: isRt ? FontWeight.w600 : FontWeight.normal,
-              color: isRt ? textColor : theme.colorScheme.onSurfaceVariant,
+              fontWeight: isRt ? FontWeight.w600 : FontWeight.w400,
+              color: isRt ? textColor : AppleColors.secondaryLabel(context),
             ),
           ),
         ],
@@ -507,52 +491,57 @@ class _StopScreenState extends State<StopScreen> {
 
     if (chiuse.isEmpty) return null;
 
-    return Card(
-      elevation: 0,
-      color: theme.colorScheme.errorContainer.withValues(alpha: 0.6),
+    return AppGroupedCard(
       margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.4)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.warning_rounded, color: theme.colorScheme.error),
-                const SizedBox(width: 8),
-                Text(
-                  'Fermata interessata da deviazioni',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.error,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            for (final c in chiuse) ...[
-              const SizedBox(height: 4),
-              Text(
-                c.answer.state == StopState.closed
-                    ? 'Linea ${c.line.shortName}: fermata non servita${c.answer.until != null ? " fino al ${c.answer.until!.day}/${c.answer.until!.month}" : ""}.'
-                    : 'Linea ${c.line.shortName}: chiuderà dal ${c.answer.from?.day}/${c.answer.from?.month}.',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+      padding: const EdgeInsets.all(14),
+      color: AppleColors.systemRed.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                CupertinoIcons.slash_circle,
+                size: 18,
+                color: AppleColors.systemRed,
               ),
-              if (c.answer.walkTo.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, left: 4),
-                  child: Text(
-                    'Dove salire al suo posto: ${DisplayNames.stop(c.answer.walkTo.first.stop)} (${c.answer.walkTo.first.meters.round()} m a piedi).',
-                    style: theme.textTheme.bodySmall,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Fermata interessata da deviazioni',
+                  style: TextStyle(
+                    color: AppleColors.systemRed,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    letterSpacing: -0.2,
                   ),
                 ),
+              ),
             ],
+          ),
+          const SizedBox(height: 8),
+          for (final c in chiuse) ...[
+            const SizedBox(height: 4),
+            Text(
+              c.answer.state == StopState.closed
+                  ? 'Linea ${c.line.shortName}: fermata non servita${c.answer.until != null ? " fino al ${c.answer.until!.day}/${c.answer.until!.month}" : ""}.'
+                  : 'Linea ${c.line.shortName}: chiuderà dal ${c.answer.from?.day}/${c.answer.from?.month}.',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: AppleColors.label(context),
+              ),
+            ),
+            if (c.answer.walkTo.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, left: 4),
+                child: Text(
+                  'Dove salire al suo posto: ${DisplayNames.stop(c.answer.walkTo.first.stop)} (${c.answer.walkTo.first.meters.round()} m a piedi).',
+                  style: AppleTypography.footnote(context),
+                ),
+              ),
           ],
-        ),
+        ],
       ),
     );
   }
