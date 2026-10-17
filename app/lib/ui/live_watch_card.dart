@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models/transit.dart';
 import '../core/text/display_names.dart';
 import '../core/pipeline/route_excursion.dart';
 import '../core/pipeline/vehicle_watch.dart';
+import 'apple_theme.dart';
 import 'theme.dart';
 
 /// "Dove sono i mezzi adesso": comandi ed esito.
@@ -50,8 +52,20 @@ class LiveWatchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final contenuto = _contenuto(context);
     if (!inCard) return contenuto;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppleSizes.marginHorizontal,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: AppleColors.secondarySystemGroupedBackground(context),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusCard),
+        border: Border.all(
+          color: AppleColors.separator(context),
+          width: 0.5,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: contenuto,
     );
   }
@@ -64,11 +78,11 @@ class LiveWatchCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.visibility_outlined, size: 18),
+              Icon(CupertinoIcons.eye, size: 18, color: AppleColors.systemBlue),
               const SizedBox(width: 8),
               Text(
                 'Mezzi in tempo reale',
-                style: Theme.of(context).textTheme.titleSmall,
+                style: AppleTypography.headline(context),
               ),
             ],
           ),
@@ -76,7 +90,7 @@ class LiveWatchCard extends StatelessWidget {
           Text(
             'Vedi dove sono i mezzi, in tempo reale, finché non '
             'interrompi: capisci se la deviazione è ancora in corso.',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: AppleTypography.footnote(context),
           ),
           const SizedBox(height: 12),
 
@@ -88,22 +102,40 @@ class LiveWatchCard extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppleColors.systemRed,
+                  side: BorderSide(
+                    color: AppleColors.systemRed.withValues(alpha: 0.4),
+                    width: 0.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppleSizes.radiusPill),
+                  ),
+                ),
                 onPressed: onStop,
-                icon: const Icon(Icons.stop_outlined, size: 18),
+                icon: const Icon(CupertinoIcons.stop_fill, size: 16),
                 label: const Text('Interrompi'),
               ),
             ),
           ] else if (error != null)
             Text(
               error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              style: TextStyle(color: AppleColors.systemRed),
             )
           else if (result != null)
             _Outcome(result: result!, shape: shape)
           else ...[
             FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppleColors.systemBlue.withValues(alpha: 0.12),
+                foregroundColor: AppleColors.systemBlue,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppleSizes.radiusPill),
+                ),
+              ),
               onPressed: onStart,
-              icon: const Icon(Icons.visibility_outlined),
+              icon: const Icon(CupertinoIcons.eye, size: 18),
               label: const Text('Segui i mezzi'),
             ),
             // Una linea alla volta: due osservazioni in parallelo
@@ -116,9 +148,7 @@ class LiveWatchCard extends StatelessWidget {
                 child: Text(
                   'Stai seguendo la $altraLinea: se inizi qui, quella si '
                   'interrompe.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppleTypography.footnote(context),
                 ),
               ),
           ],
@@ -126,9 +156,16 @@ class LiveWatchCard extends StatelessWidget {
           if (!running && (result != null || error != null))
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton(
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
                 onPressed: onStart,
-                child: const Text('Segui di nuovo'),
+                child: Text(
+                  'Segui di nuovo',
+                  style: AppleTypography.footnote(context).copyWith(
+                    color: AppleColors.systemBlue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
         ],
@@ -290,15 +327,19 @@ class _Osservato extends StatelessWidget {
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: viola.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(10),
+        color: viola.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusMd),
+        border: Border.all(
+          color: viola.withValues(alpha: 0.25),
+          width: 0.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.route_outlined, size: 17, color: viola),
+              Icon(CupertinoIcons.map_pin_ellipse, size: 17, color: viola),
               const SizedBox(width: 7),
               Text(
                 'Visto sui mezzi',
@@ -307,7 +348,7 @@ class _Osservato extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(frase.toString()),
+          Text(frase.toString(), style: AppleTypography.subheadline(context)),
           const SizedBox(height: 4),
           Text(
             consenso.isSolid
@@ -315,7 +356,7 @@ class _Osservato extends StatelessWidget {
                 // Un mezzo solo puo' essere un guasto o un rientro in
                 // deposito: va detto, non nascosto.
                 : 'Visto su un solo mezzo: potrebbe essere un caso isolato.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            style: AppleTypography.caption1(context).copyWith(
               color: consenso.isSolid ? null : scheme.onSurfaceVariant,
             ),
           ),
