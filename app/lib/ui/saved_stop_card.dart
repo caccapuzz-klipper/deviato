@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models/transit.dart';
 import '../core/pipeline/stop_answer.dart';
 import '../core/text/display_names.dart';
+import 'apple_theme.dart';
 import 'line_badge.dart';
 import 'theme.dart';
 
@@ -28,13 +30,20 @@ class SavedStopsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final nome = line.longName;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      elevation: 0,
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppleSizes.marginHorizontal,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: AppleColors.secondarySystemGroupedBackground(context),
+        borderRadius: BorderRadius.circular(AppleSizes.radiusCard),
+        border: Border.all(
+          color: AppleColors.separator(context),
+          width: 0.5,
+        ),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42,7 +51,7 @@ class SavedStopsGroup extends StatelessWidget {
           InkWell(
             onTap: onOpenLine,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
               child: Row(
                 children: [
                   LineBadge(line: line, height: 24),
@@ -51,8 +60,9 @@ class SavedStopsGroup extends StatelessWidget {
                     Expanded(
                       child: Text(
                         nome.replaceAll(' - ', ' – '),
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: scheme.onSurfaceVariant),
+                        style: AppleTypography.footnote(context).copyWith(
+                          color: AppleColors.secondaryLabel(context),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -64,11 +74,10 @@ class SavedStopsGroup extends StatelessWidget {
           ),
           for (var i = 0; i < children.length; i++) ...[
             if (i > 0)
-              // A tutta larghezza: rientrato, fra due righe rosse lasciava
-              // un gradino chiaro a sinistra.
               Divider(
-                height: 1,
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
+                height: 0.5,
+                thickness: 0.5,
+                color: AppleColors.separator(context),
               ),
             children[i],
           ],
@@ -103,7 +112,6 @@ class SavedStopRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final colori = StatusColors.of(context);
-    final testo = Theme.of(context).textTheme;
     final secondario = scheme.onSurfaceVariant;
     final stop = answer.stop;
     final chiusa = answer.state == StopState.closed && !checking;
@@ -156,7 +164,7 @@ class SavedStopRow extends StatelessWidget {
 
     return Material(
       color: chiusa
-          ? scheme.errorContainer.withValues(alpha: 0.45)
+          ? AppleColors.systemRed.withValues(alpha: 0.08)
           : Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -181,13 +189,15 @@ class SavedStopRow extends StatelessWidget {
                             text: stop == null
                                 ? 'Fermata ${answer.saved.stopCode ?? ""}'
                                 : DisplayNames.stop(stop),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            style: AppleTypography.subheadline(context).copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           if (stop?.code != null)
                             TextSpan(
                               text: '  ${stop!.code}',
-                              style: testo.bodySmall?.copyWith(
-                                color: secondario,
+                              style: AppleTypography.caption1(context).copyWith(
+                                color: AppleColors.secondaryLabel(context),
                               ),
                             ),
                         ],
@@ -203,7 +213,7 @@ class SavedStopRow extends StatelessWidget {
                         children: [
                           TextSpan(
                             text: stato,
-                            style: TextStyle(
+                            style: AppleTypography.footnote(context).copyWith(
                               color: colore,
                               fontWeight: FontWeight.w600,
                             ),
@@ -211,11 +221,12 @@ class SavedStopRow extends StatelessWidget {
                           if (verso != null)
                             TextSpan(
                               text: ' · verso $verso',
-                              style: TextStyle(color: secondario),
+                              style: AppleTypography.footnote(context).copyWith(
+                                color: AppleColors.secondaryLabel(context),
+                              ),
                             ),
                         ],
                       ),
-                      style: testo.bodySmall?.copyWith(fontSize: 13),
                     ),
                     if (chiusa && answer.walkTo.isNotEmpty)
                       Padding(
@@ -223,11 +234,15 @@ class SavedStopRow extends StatelessWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.directions_walk, size: 16),
+                            Icon(
+                              CupertinoIcons.person_badge_minus,
+                              size: 15,
+                              color: AppleColors.secondaryLabel(context),
+                            ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: DefaultTextStyle.merge(
-                                style: const TextStyle(fontSize: 13),
+                                style: AppleTypography.footnote(context),
                                 child: _SaliA(walkTo: answer.walkTo),
                               ),
                             ),
@@ -240,9 +255,9 @@ class SavedStopRow extends StatelessWidget {
               if (onOpenArrivals != null)
                 IconButton(
                   icon: Icon(
-                    Icons.departure_board_outlined,
-                    color: scheme.primary,
-                    size: 22,
+                    CupertinoIcons.clock,
+                    color: AppleColors.systemBlue,
+                    size: 20,
                   ),
                   tooltip: 'Arrivi in tempo reale',
                   onPressed: onOpenArrivals,
