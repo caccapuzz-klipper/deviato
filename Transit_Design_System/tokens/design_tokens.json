@@ -1,0 +1,188 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "name": "Transit Design Tokens",
+  "version": "6.1.7",
+  "description": "Design tokens estratti direttamente dall'applicazione nativa Transit per iOS",
+  "color": {
+    "brand": {
+      "green": {
+        "value": "#02B875",
+        "type": "color",
+        "description": "Colore primario iconico Transit, pulsante GO e tracciamento attivo"
+      },
+      "greenVibrant": {
+        "value": "#00C853",
+        "type": "color",
+        "description": "Accento live per onde radio e conferme satellitari"
+      },
+      "darkBase": {
+        "value": "#010101",
+        "type": "color",
+        "description": "Nero puro OLED per la Dark Mode nativa e i pin di mappa"
+      },
+      "white": {
+        "value": "#FEFEFE",
+        "type": "color",
+        "description": "Bianco puro riflettente per testi e bordi di contrasto"
+      }
+    },
+    "surface": {
+      "dark1": {
+        "value": "#1C1C1E",
+        "type": "color",
+        "description": "Superficie schede primaria in Dark Mode"
+      },
+      "dark2": {
+        "value": "#2C2C2E",
+        "type": "color",
+        "description": "Superficie secondaria e bordi in Dark Mode"
+      },
+      "light1": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Superficie schede primaria in Light Mode"
+      },
+      "light2": {
+        "value": "#F2F2F7",
+        "type": "color",
+        "description": "Sfondo raggruppato in Light Mode"
+      }
+    },
+    "status": {
+      "good": {
+        "value": "#34C759",
+        "type": "color",
+        "description": "Servizio regolare, in orario"
+      },
+      "warning": {
+        "value": "#FFA000",
+        "type": "color",
+        "description": "Avviso o allerta di deviazione"
+      },
+      "delay": {
+        "value": "#FF9500",
+        "type": "color",
+        "description": "Ritardo oltre 3 minuti"
+      },
+      "danger": {
+        "value": "#FF3B30",
+        "type": "color",
+        "description": "Fermata chiusa, linea soppressa"
+      }
+    },
+    "crowding": {
+      "low": {
+        "value": "#34C759",
+        "type": "color",
+        "description": "Posti a sedere disponibili (crowding_0)"
+      },
+      "medium": {
+        "value": "#FF9500",
+        "type": "color",
+        "description": "Solo posti in piedi (crowding_1)"
+      },
+      "high": {
+        "value": "#FF3B30",
+        "type": "color",
+        "description": "Vagone pieno / Nessun posto (crowding_2)"
+      },
+      "unknown": {
+        "value": "#8E8E93",
+        "type": "color",
+        "description": "Affollamento non rilevato"
+      }
+    },
+    "royale": {
+      "purple": {
+        "value": "#6C3CE9",
+        "type": "color",
+        "description": "Viola primario Transit Royale"
+      },
+      "gold": {
+        "value": "#FFC107",
+        "type": "color",
+        "description": "Oro della corona VIP di linea"
+      },
+      "glow": {
+        "value": "rgba(108, 60, 233, 0.35)",
+        "type": "color",
+        "description": "Bagliore attorno agli avatar Royale"
+      }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "primary": {
+        "value": "Puffin Transit Mobile",
+        "type": "fontFamily",
+        "foundry": "Bold Monday",
+        "designer": "Pieter van Rosmalen"
+      }
+    },
+    "fontSize": {
+      "countdownDisplay": { "value": "40pt", "type": "dimension" },
+      "instructionGO": { "value": "28pt", "type": "dimension" },
+      "routeBadge": { "value": "22pt", "type": "dimension" },
+      "directionTitle": { "value": "18pt", "type": "dimension" },
+      "stopName": { "value": "16pt", "type": "dimension" },
+      "metadata": { "value": "14pt", "type": "dimension" },
+      "microBadge": { "value": "11pt", "type": "dimension" }
+    },
+    "fontWeight": {
+      "regular": { "value": "400", "type": "fontWeight" },
+      "semiBold": { "value": "600", "type": "fontWeight" },
+      "bold": { "value": "700", "type": "fontWeight" },
+      "extraBold": { "value": "800", "type": "fontWeight" }
+    }
+  },
+  "spacing": {
+    "xxs": { "value": "2pt", "type": "dimension" },
+    "xs": { "value": "4pt", "type": "dimension" },
+    "sm": { "value": "8pt", "type": "dimension" },
+    "md": { "value": "12pt", "type": "dimension" },
+    "base": { "value": "16pt", "type": "dimension" },
+    "lg": { "value": "20pt", "type": "dimension" },
+    "xl": { "value": "24pt", "type": "dimension" },
+    "2xl": { "value": "32pt", "type": "dimension" },
+    "3xl": { "value": "48pt", "type": "dimension" }
+  },
+  "borderRadius": {
+    "badgeSmall": { "value": "6pt", "type": "dimension" },
+    "badgeMedium": { "value": "8pt", "type": "dimension" },
+    "card": { "value": "16pt", "type": "dimension", "shape": "continuous squircle" },
+    "bottomSheetTop": { "value": "24pt", "type": "dimension", "shape": "continuous squircle" },
+    "pillFull": { "value": "9999pt", "type": "dimension", "shape": "capsule" }
+  },
+  "elevation": {
+    "card": {
+      "x": "0pt",
+      "y": "2pt",
+      "blur": "4pt",
+      "color": "rgba(0, 0, 0, 0.08)"
+    },
+    "fab": {
+      "x": "0pt",
+      "y": "4pt",
+      "blur": "10pt",
+      "color": "rgba(0, 0, 0, 0.16)"
+    },
+    "bottomSheet": {
+      "x": "0pt",
+      "y": "-6pt",
+      "blur": "20pt",
+      "color": "rgba(0, 0, 0, 0.22)"
+    }
+  },
+  "haptics": {
+    "qrScanDoubleTap": {
+      "transient1": { "time": 0.010, "intensity": 0.453, "sharpness": 0.453 },
+      "transient2": { "time": 0.125, "intensity": 0.988, "sharpness": 0.988 }
+    },
+    "heartsSpawn": {
+      "transient": { "time": 0.0001, "intensity": 0.750, "sharpness": 0.450 }
+    },
+    "heartsDespawn": {
+      "transient": { "time": 0.0001, "intensity": 0.450, "sharpness": 0.450 }
+    }
+  }
+}

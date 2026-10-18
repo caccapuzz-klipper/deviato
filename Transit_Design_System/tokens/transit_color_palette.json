@@ -1,0 +1,129 @@
+{
+  "system_colors": {
+    "brand_green": {
+      "hex": "#02B875",
+      "rgb": [2, 184, 117],
+      "hsl": [158, 98, 36],
+      "usage": "Primary brand color, GO launch button, live progress fill"
+    },
+    "brand_green_vibrant": {
+      "hex": "#00C853",
+      "rgb": [0, 200, 83],
+      "hsl": [145, 100, 39],
+      "usage": "High-visibility real-time GPS radio wave pulse"
+    },
+    "dark_oled": {
+      "hex": "#010101",
+      "rgb": [1, 1, 1],
+      "hsl": [0, 0, 0],
+      "usage": "Map pin fill, Dark mode native contrast baseline"
+    },
+    "pure_white": {
+      "hex": "#FEFEFE",
+      "rgb": [254, 254, 254],
+      "hsl": [0, 0, 100],
+      "usage": "Map pin outer border stroke (2pt), line card text on dark lines"
+    }
+  },
+  "surfaces": {
+    "light": {
+      "background_primary": "#FFFFFF",
+      "background_grouped": "#F2F2F7",
+      "separator": "rgba(60, 60, 67, 0.12)",
+      "text_primary": "#000000",
+      "text_secondary": "rgba(60, 60, 67, 0.60)",
+      "bottom_sheet_handle": "rgba(0, 0, 0, 0.20)"
+    },
+    "dark": {
+      "background_primary": "#1C1C1E",
+      "background_grouped": "#000000",
+      "separator": "rgba(84, 84, 88, 0.35)",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "rgba(235, 235, 245, 0.60)",
+      "bottom_sheet_handle": "rgba(255, 255, 255, 0.25)"
+    }
+  },
+  "semantics": {
+    "service_good": {
+      "hex": "#34C759",
+      "label": "Good Service",
+      "description": "Transit line operating on normal schedule"
+    },
+    "service_warning": {
+      "hex": "#FFA000",
+      "label": "Service Advisory",
+      "description": "Planned works, elevator maintenance or minor delay"
+    },
+    "service_delay": {
+      "hex": "#FF9500",
+      "label": "Significant Delay",
+      "description": "Vehicles delayed by more than 3 minutes"
+    },
+    "service_danger": {
+      "hex": "#FF3B30",
+      "label": "Line Closed / Suspended",
+      "description": "Station closed or major breakdown"
+    }
+  },
+  "crowding_levels": {
+    "level_0": {
+      "hex": "#34C759",
+      "dudes_count": 1,
+      "meaning": "Seats available"
+    },
+    "level_1": {
+      "hex": "#FF9500",
+      "dudes_count": 2,
+      "meaning": "Standing room only"
+    },
+    "level_2": {
+      "hex": "#FF3B30",
+      "dudes_count": 3,
+      "meaning": "Full / Boarding not guaranteed"
+    },
+    "level_unknown": {
+      "hex": "#8E8E93",
+      "dudes_count": 0,
+      "meaning": "Crowding data unavailable"
+    }
+  },
+  "royale_palette": {
+    "royale_purple": "#6C3CE9",
+    "royale_purple_deep": "#4D23B8",
+    "royale_crown_gold": "#FFC107",
+    "royale_glow_ambient": "rgba(108, 60, 233, 0.35)",
+    "royale_gradient": ["#6C3CE9", "#9B51E0", "#FFC107"]
+  },
+  "extracted_agency_palettes": {
+    "transport_for_london": {
+      "bakerloo_brown": "#B26300",
+      "central_red": "#DC241F",
+      "circle_yellow": "#FFD329",
+      "district_green": "#007D32",
+      "hammersmith_pink": "#F4A9BE",
+      "jubilee_silver": "#A1A5A7",
+      "metropolitan_magenta": "#9B0058",
+      "northern_black": "#000000",
+      "piccadilly_blue": "#0019A8",
+      "victoria_light_blue": "#0098D8",
+      "waterloo_teal": "#93CEBA"
+    },
+    "chicago_cta": {
+      "red_line": "#C60C30",
+      "blue_line": "#00A1DE",
+      "brown_line": "#62361B",
+      "green_line": "#009B3A",
+      "orange_line": "#F9461C",
+      "purple_line": "#522398",
+      "pink_line": "#E27EA6",
+      "yellow_line": "#F9E300"
+    },
+    "vancouver_translink": {
+      "expo_line_blue": "#0064B2",
+      "millennium_line_yellow": "#FFC72C",
+      "canada_line_teal": "#00A3AD",
+      "rapidbus_green": "#008542",
+      "seabus_sky_blue": "#00B4E5"
+    }
+  }
+}

@@ -1,0 +1,888 @@
+import '../deviation_service.dart';
+import '../geo/geometry.dart';
+import '../geo/projection.dart';
+import '../models/notice.dart';
+import '../models/transit.dart';
+import '../pipeline/extractor.dart';
+import '../pipeline/geocoder.dart';
+import '../pipeline/rejoin_inference.dart';
+import '../pipeline/route_builder.dart';
+import '../config.dart';
+import '../net/gtt_http.dart';
+import '../pipeline/stop_impact.dart';
+import '../pipeline/vie_osm.dart';
+import 'fermate_sul_percorso.dart';
+import 'incroci.dart';
+import 'lungo_le_vie.dart';
+import 'ricostruzione.dart';
+import 'rifinitura.dart';
+import 'scelta_direzione.dart';
+
+/// Il secondo algoritmo: nato il 28/09/2026 come copia identica del
+/// primo, e' quello da correggere.
+///
+/// I difetti misurati sulle 66 deviazioni disegnate quel giorno: vie
+/// lunghe ridotte a un punto che obbliga il percorso ad andare e tornare,
+/// l'incrocio dello stacco («angolo corso Vinzaglio») ignorato, un elenco
+/// di vie usato per tutte e due le direzioni, inizio e fine lontani dalla
+/// linea. Il primo resta com'era in [Ricostruzione1].
+///
+/// Cosa cambia rispetto al primo, finora:
+/// - ogni direzione usa il suo elenco di vie ([_direzioneDi]), e un avviso
+///   per una direzione sola non si applica all'altra ([direzioniDi]); un
+///   elenco senza direzione vale per tutte e due, e dove sulla mappa va al
+///   contrario si gira;
+/// - lo stacco e il rientro dichiarato si agganciano alla linea normale, e
+///   il punto trovato per la via dello stacco non diventa una tappa: e' una
+///   via lunga quanto la linea, e il suo punto cade dove capita;
+/// - le tappe sono gli incroci fra una via e la successiva, calcolati
+///   sulla forma intera delle vie presa da OpenStreetMap ([ViePerNome],
+///   [Incroci]); se una via manca, si torna ai punti di Photon;
+/// - fra una svolta e l'altra il percorso segue la via nominata
+///   ([LungoLeVie]), e per un tram i binari; il calcolo per autobus
+///   (Valhalla) resta per quando una via non porta alla successiva;
+/// - se il percorso delle vie nominate e' la linea stessa, la deviazione
+///   e' gia' negli orari: nessuna fermata saltata;
+/// - le fermate lungo il percorso deviato ([FermateSulPercorso]);
+/// - il rosso perde i pezzi che corrono sopra la linea normale;
+/// - tre controlli in piu' ([Rifinitura.controlla]): inizio o fine lontani
+///   dalla linea, verso contrario, andare e tornare sulla stessa via.
+class Ricostruzione2 implements Ricostruzione, FiltroDirezioni {
+  Ricostruzione2({
+    required this._geocoder,
+    required this._router,
+    required this._impact,
+    ViePerNome? vie,
+  }) : _vie = vie ?? ViePerNome();
+
+  final ViePerNome _vie;
+
+  late final _fermate = FermateSulPercorso(_impact.index);
+
+  final Geocoder _geocoder;
+  final RouteBuilder _router;
+  final StopImpactAnalyzer _impact;
+
+  @override
+  Future<DeviationReport> analizza(
+    RawNotice notice,
+    RouteShape shape,
+    ExtractionResult extraction, {
+    void Function(String phase)? onProgress,
+  }) async {
+    // 1. Testo -> struttura: gia' fatto, una volta per avviso.
+    //
+    // Un errore del modello (quota, rete, chiave) passa; un testo che non
+    // descrive un percorso no.
+    final estrazioneDaRitentare = extraction.status == ExtractionStatus.error;
+    if (!extraction.isUsable) {
+      // L'LLM non ha risposto — quota finita, rete, servizio giu'. Ma se
+      // GTT ha scritto un numero di fermata, quel numero sta nel testo e
+      // lo prende una regex: non serve nessun modello per leggerlo.
+      // Sarebbe assurdo perdere il dato piu' certo che abbiamo proprio
+      // quando tutto il resto non funziona.
+      final impact = _impact.declaredOnly(
+        officialRoute: shape,
+        declaredCodes: notice.suspendedStopCodes.toSet(),
+      );
+      if (impact.hasImpact) {
+        return DeviationReport(
+          notice: notice,
+          shape: shape,
+          impact: impact,
+          // Non "confermata": senza estrazione non sappiamo se l'avviso
+          // dica anche altro, per esempio un cambio di percorso che non
+          // abbiamo ricostruito.
+          confidence: Confidence.probabile,
+          whyIncomplete:
+              'La fermata sospesa è indicata da GTT. Il resto '
+              'dell\'avviso non è stato letto: '
+              '${DeviationService.lowerFirst(DeviationService.explainExtractionFailure(extraction))}',
+          retryable: estrazioneDaRitentare,
+        );
+      }
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        confidence: Confidence.soloTesto,
+        whyIncomplete: DeviationService.explainExtractionFailure(extraction),
+        retryable: estrazioneDaRitentare,
+      );
+    }
+    // 1-ter. Quale elenco di vie vale per questa direzione.
+    final altra = _impact.index.mainShape(
+      shape.routeId,
+      shape.directionId == 0 ? 1 : 0,
+    );
+    final assegnate = await _assegna(extraction.deviations, [
+      shape,
+      if (altra != null && altra.shapeId != shape.shapeId) altra,
+    ]);
+    final mie = [
+      for (final e in assegnate.entries)
+        if (e.value?.shapeId == shape.shapeId) e.key,
+    ];
+    final senzaDirezione = [
+      for (final e in assegnate.entries)
+        if (e.value == null) e.key,
+    ];
+    final esplicita = mie.isNotEmpty;
+    ParsedDeviation parsed;
+    if (esplicita) {
+      parsed = mie.first;
+    } else if (senzaDirezione.isNotEmpty) {
+      // Un elenco senza direzione vale per tutte e due. Se sono piu' d'uno
+      // si prende quello che sulla mappa va nel nostro verso.
+      parsed = senzaDirezione.first;
+      if (senzaDirezione.length > 1) {
+        for (final c in senzaDirezione) {
+          final g = await _cerca(c, shape, onProgress);
+          if (g.punti.length >= 2 && !_alContrario(g.punti, shape)) {
+            parsed = c;
+            break;
+          }
+        }
+      }
+    } else {
+      // Tutto quello che l'avviso descrive e' per l'altra direzione. Di
+      // solito qui non si arriva ([direzioniDi] la scarta prima).
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: extraction.deviations.first,
+        confidence: Confidence.confermata,
+        impact: const StopImpactResult(
+          impacts: [],
+          affectedFromMeters: 0,
+          affectedToMeters: 0,
+        ),
+        whyIncomplete: 'Questo avviso riguarda l\'altra direzione.',
+      );
+    }
+
+    // Una sostituzione di mezzo non cambia il percorso: mostrarla come
+    // deviazione sarebbe un allarme falso (§10.10).
+    if (parsed.type == DeviationType.sostituzioneModale) {
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        confidence: Confidence.confermata,
+        whyIncomplete: 'Stesso percorso, cambia solo il tipo di mezzo.',
+      );
+    }
+
+    // 1-bis. Fermate sospese senza cambio di percorso.
+    //
+    // MISURATO: 14 avvisi su 198 dicono soltanto "Fermata 3447 Sabotino
+    // sospesa". Il codice sta nel testo, non in informed_entity, e si
+    // estrae con una regex. Prima finivano nel ramo "non nomina abbastanza
+    // vie" e l'informazione si perdeva, pur essendo la piu' certa che il
+    // sistema abbia: nessuna geometria da ricostruire, solo un codice da
+    // cercare nel GTFS.
+    final declaredCodes = <String>{
+      ...notice.suspendedStopCodes,
+      ...parsed.suspendedStopCodes,
+    };
+    if (declaredCodes.isNotEmpty && parsed.viaSequence.isEmpty) {
+      final impact = _impact.declaredOnly(
+        officialRoute: shape,
+        declaredCodes: declaredCodes,
+      );
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        impact: impact,
+        confidence: Confidence.confermata,
+        whyIncomplete: impact.hasImpact
+            ? null
+            : declaredCodes.length == 1
+            ? 'La fermata ${declaredCodes.first} indicata da GTT non è '
+                  'su questo percorso.'
+            : 'Le fermate ${declaredCodes.join(", ")} indicate da GTT '
+                  'non sono su questo percorso.',
+      );
+    }
+
+    // 2. Toponimi -> coordinate, vincolate al percorso di questa linea.
+    final toponyms = parsed.allToponyms;
+    if (toponyms.length < 2) {
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        confidence: Confidence.soloTesto,
+        whyIncomplete:
+            'L\'avviso non indica abbastanza vie per disegnare '
+            'il percorso.',
+      );
+    }
+
+    final cercate = await _cerca(parsed, shape, onProgress);
+    var points = cercate.punti;
+    // Photon non raggiungibile non e' «via non trovata»: si ritenta.
+    final geocodingInErrore = cercate.inErrore;
+
+    // 2-ter. Le vie intere, per gli incroci e per il cammino fra le
+    // svolte.
+    final Map<String, List<List<GeoPoint>>> intere;
+    try {
+      onProgress?.call('forma delle vie');
+      intere = await _vie.cerca(
+        [
+          ?parsed.detachStreet,
+          ?parsed.detachCrossStreet,
+          ...parsed.viaSequence,
+          ?parsed.rejoinStreet,
+        ],
+        shape,
+        attorno: points,
+      );
+    } on GttHttpException {
+      // Overpass non risponde. Coi soli punti di Photon il percorso torna
+      // quello del primo algoritmo, coi suoi errori: il 29/09 la 9 cosi'
+      // dava quattro fermate non servite da cui il bus passava. Meglio il
+      // solo testo fino al prossimo giro, che rifa' l'analisi senza
+      // spendere letture: la lettura e' salvata.
+      return _senzaVie(notice, shape, parsed, {
+        ...notice.suspendedStopCodes,
+        ...parsed.suspendedStopCodes,
+      });
+    }
+    bool intera(String t) => (intere[t] ?? const []).isNotEmpty;
+    // Una via che Photon non trova ma OpenStreetMap si': «corso Vittorio
+    // Emanuele II» per la 92, il 28/09.
+    final unresolved = [
+      for (final t in cercate.nonTrovate)
+        if (!intera(t)) t,
+    ];
+    final incroci = parsed.viaSequence.every(intera);
+    if (points.length < 2 && !incroci) {
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        confidence: Confidence.soloTesto,
+        whyIncomplete: 'Vie non trovate sulla mappa: ${unresolved.join(", ")}.',
+        retryable: geocodingInErrore,
+      );
+    }
+
+    // 2-bis. Dove rientra.
+    //
+    // MISURATO: 24 avvisi su 28 non nominano la via di rientro, dicono solo
+    // "percorso normale". Senza dedurlo il percorso deviato si ferma
+    // all'ultima via nominata, il tratto di linea interessato resta
+    // troncato, e le fermate fra li' e il rientro vero non vengono valutate.
+    // Un elenco senza direzione e' scritto nel verso di una delle due: per
+    // l'altra si legge al contrario. La via dello stacco diventa quella
+    // del rientro, che sta sulla linea: il rientro si deduce.
+    var girato = false;
+    var rientroDichiarato = parsed.rejoinStreet != null;
+    if (!esplicita && points.length >= 2 && _alContrario(points, shape)) {
+      points = points.reversed.toList();
+      girato = true;
+      rientroDichiarato = false;
+    }
+
+    // Le tappe: prima dagli incroci, se OpenStreetMap ha tutte le vie in
+    // mezzo; altrimenti dai punti di Photon agganciati alla linea.
+    final dagliIncroci = incroci
+        ? _tappeDagliIncroci(parsed, shape, intere, girato: girato)
+        : null;
+    final List<GeoPoint> waypoints;
+    final List<GeoPoint> inMezzo;
+    final RejoinPoint rejoin;
+    if (dagliIncroci != null) {
+      waypoints = dagliIncroci.tappe;
+      inMezzo = waypoints.sublist(1, waypoints.length - 1);
+      rejoin = RejoinPoint(
+        source: rientroDichiarato
+            ? RejoinSource.dichiarato
+            : RejoinSource.dedotto,
+        point: waypoints.last,
+        alongMeters: dagliIncroci.rientroMetri,
+        metersFromRoute: 0,
+      );
+    } else {
+      if (points.length < 2) {
+        return DeviationReport(
+          notice: notice,
+          shape: shape,
+          parsed: parsed,
+          confidence: Confidence.soloTesto,
+          whyIncomplete:
+              'Vie non trovate sulla mappa: ${unresolved.join(", ")}.',
+          retryable: geocodingInErrore,
+        );
+      }
+      final t = _tappeDaiPunti(points, shape, rientroDichiarato);
+      waypoints = t.tappe;
+      inMezzo = t.inMezzo;
+      rejoin = t.rientro;
+    }
+
+    // 3. Punti -> percorso vero, con le cinque prove. Prima lungo le vie
+    // nominate, da una svolta all'altra; se una non porta alla successiva,
+    // col calcolo del percorso per autobus.
+    onProgress?.call('calcolo del percorso');
+    final tram = _impact.index.lines[shape.routeId]?.isTram ?? false;
+    final lungoLeVie = dagliIncroci == null
+        ? null
+        : await _lungoLeVie(dagliIncroci, shape, tram: tram, attorno: points);
+    final route = lungoLeVie != null
+        ? RouteBuilder.verifica(
+            geometry: lungoLeVie,
+            waypoints: waypoints,
+            officialRoute: shape,
+            requiredVias: inMezzo,
+          )
+        : await _router.build(
+            waypoints: waypoints,
+            officialRoute: shape,
+            // Le vie da attraversare restano quelle NOMINATE in mezzo:
+            // stacco e rientro ora stanno sulla linea, e il punto di Photon
+            // per la loro via puo' essere lontano da dove il bus la usa.
+            requiredVias: inMezzo,
+          );
+    if (route.geometry == null) {
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        rejoin: rejoin,
+        confidence: Confidence.soloTesto,
+        whyIncomplete: 'Non è stato possibile calcolare il percorso deviato.',
+        retryable: geocodingInErrore || route.status == RouteBuildStatus.error,
+      );
+    }
+
+    // 3-bis. Il rosso solo dove il bus sta davvero altrove, e i controlli
+    // che le cinque prove non fanno.
+    final rifinita = Rifinitura.taglia(route.geometry!, shape);
+    if (lungoLeVie != null && _fuoriLinea(lungoLeVie, shape) < _giaNegliOrari) {
+      // Le vie dell'avviso, percorse una dopo l'altra, sono la linea
+      // stessa: GTT ha gia' messo la deviazione negli orari, e le fermate
+      // della linea sono quelle servite. MISURATO coi mezzi il 28/09: la
+      // 9 passava da via Cibrario come nel suo percorso, e l'app dava sei
+      // fermate non servite da cui il bus passava.
+      final dichiarate = <String>{
+        ...notice.suspendedStopCodes,
+        ...parsed.suspendedStopCodes,
+      };
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        rejoin: rejoin,
+        impact: dichiarate.isEmpty
+            ? const StopImpactResult(
+                impacts: [],
+                affectedFromMeters: 0,
+                affectedToMeters: 0,
+              )
+            : _impact.declaredOnly(
+                officialRoute: shape,
+                declaredCodes: dichiarate,
+              ),
+        confidence: Confidence.confermata,
+        whyIncomplete:
+            'Il percorso deviato è già negli orari GTT: le fermate '
+            'della linea sono quelle servite.',
+      );
+    }
+    if (rifinita.isEmpty) {
+      // Tutto il percorso calcolato sta sopra la linea normale: non c'e'
+      // niente da disegnare, e disegnarlo farebbe credere a una deviazione
+      // su vie dove il bus passa comunque.
+      final dichiarate = <String>{
+        ...notice.suspendedStopCodes,
+        ...parsed.suspendedStopCodes,
+      };
+      final impact = dichiarate.isEmpty
+          ? null
+          : _impact.declaredOnly(
+              officialRoute: shape,
+              declaredCodes: dichiarate,
+            );
+      return DeviationReport(
+        notice: notice,
+        shape: shape,
+        parsed: parsed,
+        rejoin: rejoin,
+        impact: impact,
+        confidence: impact != null && impact.hasImpact
+            ? Confidence.probabile
+            : Confidence.soloTesto,
+        whyIncomplete: 'Non è stato possibile calcolare il percorso deviato.',
+        retryable: geocodingInErrore,
+      );
+    }
+    final problemi = Rifinitura.controlla(rifinita, shape);
+    final tuttoBene =
+        route.isUsable && unresolved.isEmpty && problemi.isEmpty && !girato;
+
+    // 4. Quali fermate saltano.
+    final impact = _impact.analyze(
+      officialRoute: shape,
+      deviatedRoute: rifinita,
+      declaredSuspendedCodes: {
+        ...notice.suspendedStopCodes,
+        ...parsed.suspendedStopCodes,
+      },
+    );
+
+    return DeviationReport(
+      notice: notice,
+      shape: shape,
+      parsed: parsed,
+      rejoin: rejoin,
+      deviatedGeometry: rifinita,
+      impact: impact,
+      // Solo col percorso delle vie nominate, e verificato: quello di
+      // Valhalla puo' passare per una parallela, e un rosso incerto (la 6
+      // il 29/09) proponeva quattro fermate da cui il bus non passava.
+      fermateSulPercorso: lungoLeVie != null && tuttoBene
+          ? _fermate.lungo(rifinita, shape)
+          : const [],
+      confidence: tuttoBene ? Confidence.confermata : Confidence.probabile,
+      whyIncomplete: tuttoBene
+          ? null
+          // Frasi per chi legge, non l'elenco delle prove fallite: «lungo
+          // 4,1 km per sostituire 1,2 km (3,4x, max 3x)» e' utile a chi
+          // tara le soglie (lo stampano gli strumenti in tool/), non a chi
+          // aspetta il bus.
+          : [
+              if (unresolved.isNotEmpty)
+                'Vie non trovate sulla mappa: ${unresolved.join(", ")}.',
+              if (!rejoin.isUsable) 'Il punto di rientro è incerto.',
+              if (girato)
+                'GTT descrive il percorso di una direzione sola: questo è '
+                    'ricavato al contrario.',
+              if (route.failures.isNotEmpty || problemi.isNotEmpty)
+                'Il percorso calcolato non corrisponde del tutto all\'avviso.',
+            ].join(' '),
+      // Una via non trovata perche' Photon non rispondeva potrebbe
+      // completare il percorso al prossimo giro.
+      retryable: geocodingInErrore,
+    );
+  }
+
+  /// Il percorso non si e' potuto calcolare adesso: il solo testo, o le
+  /// fermate sospese indicate da GTT se ce ne sono. Si rifa' al prossimo
+  /// giro.
+  DeviationReport _senzaVie(
+    RawNotice notice,
+    RouteShape shape,
+    ParsedDeviation parsed,
+    Set<String> dichiarate,
+  ) {
+    final impact = _impact.declaredOnly(
+      officialRoute: shape,
+      declaredCodes: dichiarate,
+    );
+    return DeviationReport(
+      notice: notice,
+      shape: shape,
+      parsed: parsed,
+      impact: impact.hasImpact ? impact : null,
+      confidence: impact.hasImpact
+          ? Confidence.probabile
+          : Confidence.soloTesto,
+      whyIncomplete: impact.hasImpact
+          ? 'La fermata sospesa è indicata da GTT. Il percorso sarà '
+                'calcolato a breve.'
+          : 'Percorso non ancora calcolato: sarà disponibile a breve.',
+      retryable: true,
+    );
+  }
+
+  @override
+  Future<List<RouteShape>> direzioniDi(
+    RawNotice notice,
+    List<RouteShape> candidate,
+    ExtractionResult extraction,
+  ) async {
+    if (candidate.length < 2) return candidate;
+    final assegnate = await _assegna(extraction.deviations, candidate);
+    // Una deviazione senza direzione vale per tutte e due; una di cui non
+    // si capisce la direzione anche, nel dubbio.
+    if (assegnate.values.any((s) => s == null)) return candidate;
+    final scelte = {for (final s in assegnate.values) s!.shapeId};
+    final out = [
+      for (final s in candidate)
+        if (scelte.contains(s.shapeId)) s,
+    ];
+    return out.isEmpty ? candidate : out;
+  }
+
+  /// A quale di [direzioni] appartiene ogni deviazione letta: null se non
+  /// nomina una direzione, o se non si capisce quale.
+  Future<Map<ParsedDeviation, RouteShape?>> _assegna(
+    List<ParsedDeviation> letture,
+    List<RouteShape> direzioni,
+  ) async => {for (final d in letture) d: await _direzioneDi(d, direzioni)};
+
+  /// La direzione di [d] fra [direzioni].
+  ///
+  /// Prima le parole del capolinea: «Direzione piazza Stampalia» contro
+  /// «BARRIERA LANZO, PIAZZA STAMPALIA». Se non bastano, la mappa: «nella
+  /// sola direzione via Biscaretti» (la 94) e' la direzione che finisce
+  /// vicino a via Biscaretti, anche se negli orari il suo capolinea si
+  /// chiama «MIRAFIORI, VIA FACCIOLI (FCA)». Con le sole parole l'avviso
+  /// finiva su tutte e due, e l'altra riceveva una deviazione mai
+  /// annunciata.
+  Future<RouteShape?> _direzioneDi(
+    ParsedDeviation d,
+    List<RouteShape> direzioni,
+  ) async {
+    final nominate = SceltaDirezione.parole(d.directionDesc ?? '');
+    if (nominate.isEmpty || direzioni.isEmpty) return null;
+    final perNome = [
+      for (final s in direzioni)
+        if (SceltaDirezione.parole(s.headsign).any(nominate.contains)) s,
+    ];
+    if (perNome.length == 1) return perNome.single;
+    if (direzioni.length < 2) return null;
+    final luogo = SceltaDirezione.luogo(d.directionDesc);
+    if (luogo == null) return null;
+    // Il punto serve anche fuori dal vincolo del percorso: il capolinea
+    // puo' stare oltre il chilometro dalla linea.
+    final p = (await _geocoder.locate(luogo, near: direzioni.first)).point;
+    if (p == null) return null;
+    final distanze = [
+      for (final s in direzioni)
+        s.points.isEmpty
+            ? double.infinity
+            : p.meters.distanceTo(s.points.last.meters),
+    ];
+    var migliore = 0;
+    for (var i = 1; i < distanze.length; i++) {
+      if (distanze[i] < distanze[migliore]) migliore = i;
+    }
+    final seconda = [
+      for (var i = 0; i < distanze.length; i++)
+        if (i != migliore) distanze[i],
+    ].reduce((a, b) => a < b ? a : b);
+    // Deciso solo se il capolinea e' vicino e l'altro nettamente piu'
+    // lontano: una direzione indicata a meta' linea non dice niente.
+    if (distanze[migliore] <= _capolineaVicino &&
+        seconda >= distanze[migliore] * 2) {
+      return direzioni[migliore];
+    }
+    return null;
+  }
+
+  static const _capolineaVicino = 3000.0;
+
+  /// Le tappe dai punti di Photon: lo stacco agganciato alla linea, le vie
+  /// in mezzo come punti, il rientro dichiarato agganciato o dedotto.
+  ({List<GeoPoint> tappe, List<GeoPoint> inMezzo, RejoinPoint rientro})
+  _tappeDaiPunti(
+    List<GeoPoint> points,
+    RouteShape shape,
+    bool rientroDichiarato,
+  ) {
+    // Lo stacco sta sulla linea normale, per definizione: «da corso
+    // Vittorio» vuol dire dal punto in cui il bus lascia corso Vittorio.
+    // Il punto che Photon da' per una via lunga cade dove capita — la 9
+    // partiva 547 m piu' in la' — e si aggancia alla linea.
+    final stacco = Rifinitura.aggancia(points.first, shape);
+    final staccoSullaLinea = stacco.distanza <= GttConfig.geocodeBufferMeters;
+    final primo = staccoSullaLinea ? stacco.punto : points.first;
+
+    final RejoinPoint rejoin;
+    if (rientroDichiarato) {
+      // GTT l'ha detto. Anche qui si aggancia alla linea, a valle dello
+      // stacco: e' li' che il bus riprende il percorso normale.
+      final r = Rifinitura.aggancia(
+        points.last,
+        shape,
+        daMetri: staccoSullaLinea ? stacco.metri : 0,
+      );
+      rejoin = RejoinPoint(
+        source: RejoinSource.dichiarato,
+        point: r.distanza <= GttConfig.geocodeBufferMeters
+            ? r.punto
+            : points.last,
+        alongMeters: r.metri,
+        metersFromRoute: r.distanza,
+      );
+    } else {
+      rejoin = RejoinInference.infer(
+        officialRoute: shape,
+        detachPoint: points.first,
+        lastVia: points.last,
+      );
+    }
+
+    // Le tappe: lo stacco sulla linea, le vie in mezzo, il rientro.
+    final inMezzo = points.sublist(
+      1,
+      rientroDichiarato ? points.length - 1 : points.length,
+    );
+    final waypoints = [
+      primo,
+      ...inMezzo,
+      if (rejoin.isUsable)
+        rejoin.point!
+      else if (rientroDichiarato)
+        points.last,
+    ];
+
+    return (tappe: waypoints, inMezzo: inMezzo, rientro: rejoin);
+  }
+
+  /// Le tappe dagli incroci: dove il bus lascia la linea, dove gira da una
+  /// via nella successiva, dove torna sulla linea. null se una svolta non
+  /// si trova: allora si usano i punti.
+  ({
+    List<GeoPoint> tappe,
+    double rientroMetri,
+    List<List<List<GeoPoint>>> tratti,
+  })?
+  _tappeDagliIncroci(
+    ParsedDeviation parsed,
+    RouteShape shape,
+    Map<String, List<List<GeoPoint>>> intere, {
+    required bool girato,
+  }) {
+    List<List<GeoPoint>> g(String? n) =>
+        n == null ? const [] : intere[n] ?? const [];
+    final vie = girato
+        ? parsed.viaSequence.reversed.toList()
+        : parsed.viaSequence;
+    if (vie.isEmpty || vie.any((v) => g(v).isEmpty)) return null;
+
+    // Lo stacco: l'incrocio fra la via dello stacco e quella indicata con
+    // «angolo», o la prima deviata. «Da corso Vittorio Emanuele II angolo
+    // corso Vinzaglio». Deve stare sulla linea.
+    GeoPoint? stacco;
+    double? staccoMetri;
+    final dove = parsed.detachStreet;
+    final angolo = parsed.detachCrossStreet ?? vie.first;
+    if (!girato &&
+        dove != null &&
+        ViePerNome.scomponi(dove) != ViePerNome.scomponi(angolo)) {
+      final x = Incroci.incrocio(g(dove), g(angolo));
+      if (x != null) {
+        final a = Rifinitura.aggancia(x, shape);
+        if (a.distanza <= _staccoSullaLinea) {
+          stacco = a.punto;
+          staccoMetri = a.metri;
+        }
+      }
+    }
+    if (stacco == null) {
+      // Senza incrocio: dove la prima via deviata tocca la linea, il piu'
+      // vicino possibile alla prima svolta. Largo Dora Firenze la 68 lo
+      // percorre due volte: il primo contatto lungo la linea era un
+      // chilometro prima dello stacco vero, e il rosso tagliava il largo.
+      final svolta = vie.length > 1
+          ? Incroci.incrocio(g(vie[0]), g(vie[1]))
+          : null;
+      final c = Incroci.contatto(g(vie.first), shape, vicino: svolta);
+      if (c == null) return null;
+      stacco = c.punto;
+      staccoMetri = c.metri;
+    }
+
+    final tappe = [stacco];
+    var prima = stacco;
+    for (var i = 0; i < vie.length - 1; i++) {
+      final x =
+          Incroci.incrocio(g(vie[i]), g(vie[i + 1]), vicino: prima) ??
+          Incroci.piuVicino(g(vie[i + 1]), prima);
+      if (x == null) return null;
+      tappe.add(x);
+      prima = x;
+    }
+
+    // Il rientro: dove la via del rientro, o l'ultima deviata, torna sulla
+    // linea, a valle dello stacco.
+    final String ultima;
+    if (!girato &&
+        parsed.rejoinStreet != null &&
+        g(parsed.rejoinStreet).isNotEmpty) {
+      ultima = parsed.rejoinStreet!;
+    } else if (girato && dove != null && g(dove).isNotEmpty) {
+      ultima = dove;
+    } else {
+      ultima = vie.last;
+    }
+    final r = Incroci.contatto(
+      g(ultima),
+      shape,
+      daMetri: staccoMetri! + _avanti,
+      vicino: prima,
+    );
+    if (r == null) return null;
+    tappe.add(r.punto);
+
+    // Le vie di ogni tratto fra due tappe: la sua, e al primo anche quelle
+    // dello stacco, all'ultimo quella del rientro.
+    final tratti = [
+      for (var i = 0; i < vie.length; i++)
+        [
+          ...g(vie[i]),
+          if (i == 0 && !girato) ...[
+            ...g(dove),
+            ...g(parsed.detachCrossStreet),
+          ],
+          if (i == vie.length - 1 && ultima != vie[i]) ...g(ultima),
+        ],
+    ];
+    return (tappe: tappe, rientroMetri: r.metri, tratti: tratti);
+  }
+
+  /// Il percorso da una tappa all'altra lungo le vie del tratto; per un
+  /// tram lungo i binari, se ci sono. Un tratto che sulle vie non si trova
+  /// — una via che in OpenStreetMap non tocca la successiva, un ponte che
+  /// ha un altro nome (via Cigna sulla Dora, per la 46) — si chiede a
+  /// Valhalla, da solo: fra due punti della stessa via non ha molto da
+  /// scegliere. null se non lo trova neanche lui.
+  Future<List<GeoPoint>?> _lungoLeVie(
+    ({
+      List<GeoPoint> tappe,
+      double rientroMetri,
+      List<List<List<GeoPoint>>> tratti,
+    })
+    t,
+    RouteShape shape, {
+    required bool tram,
+    required List<GeoPoint> attorno,
+  }) async {
+    LungoLeVie? binari;
+    if (tram) {
+      try {
+        final b = await _vie.binari(shape, attorno: [...attorno, ...t.tappe]);
+        if (b.isNotEmpty) {
+          binari = LungoLeVie(b, svoltaMassima: _svoltaTram);
+        }
+      } on GttHttpException {
+        // Senza binari si va per le vie, come un autobus.
+      }
+    }
+    final out = <GeoPoint>[];
+    final n = t.tappe.length - 1;
+    for (var k = 0; k < n; k++) {
+      final a = t.tappe[k], b = t.tappe[k + 1];
+      final dritto = a.meters.distanceTo(b.meters);
+      // Un cammino molto piu' lungo della linea d'aria e' un giro per
+      // raggiungere un pezzo di via staccato, non la via.
+      List<GeoPoint>? credibile(List<GeoPoint>? c) =>
+          c != null && LungoLeVie.lunghezza(c) <= dritto * 1.5 + 150 ? c : null;
+      // Prima la via sola. Se non basta, con le vie accanto: corso San
+      // Martino, per la 9, si raggiunge solo passando per le piazze ai
+      // due capi.
+      final perVia =
+          credibile(LungoLeVie(t.tratti[k]).cammino(a, b)) ??
+          credibile(
+            LungoLeVie([
+              if (k > 0) ...t.tratti[k - 1],
+              ...t.tratti[k],
+              if (k < n - 1) ...t.tratti[k + 1],
+            ]).cammino(a, b),
+          );
+      final suBinari = binari?.cammino(a, b);
+      // Sui binari solo se coincidono con la via. Un incrocio fra due vie
+      // cade spesso sul binario di traverso, e da li' il tram, che non
+      // gira ad angolo retto, va a cercare un raccordo lontano: sulla 9
+      // fino a quattro volte la strada.
+      final riferimento = perVia != null
+          ? LungoLeVie.lunghezza(perVia)
+          : dritto;
+      final pezzo =
+          (suBinari != null &&
+                  LungoLeVie.lunghezza(suBinari) <= riferimento * 1.25 + 30
+              ? suBinari
+              : perVia) ??
+          (dritto <= _drittoMassimo
+              ? [a, b]
+              : (await _router.build(
+                  waypoints: [a, b],
+                  officialRoute: shape,
+                )).geometry);
+      if (pezzo == null || pezzo.length < 2) return null;
+      out.addAll(out.isEmpty ? pezzo : pezzo.skip(1));
+    }
+    return out.length < 2 ? null : out;
+  }
+
+  /// Un tram gira al massimo di tanto in un nodo dei binari.
+  static const _svoltaTram = 50.0;
+
+  /// Un tratto che non si trova sulle vie si fa dritto, se e' corto: due
+  /// vie che in OpenStreetMap non si toccano per pochi metri.
+  static const _drittoMassimo = 200.0;
+
+  /// Meno di tanti metri lontano dalla linea, col percorso delle vie
+  /// nominate, vuol dire che quelle vie sono la linea stessa.
+  static const _giaNegliOrari = 120.0;
+
+  /// Quanti metri di [percorso] stanno a piu' di 40 m dalla linea. Non la
+  /// lunghezza del rosso: un incrocio calcolato 30 m di lato, a meta'
+  /// strada, allunga il rosso da li' alla fine senza che il bus lasci la
+  /// linea.
+  static double _fuoriLinea(List<GeoPoint> percorso, RouteShape shape) {
+    final linea = shape.meters;
+    final fitto = Geometry.densify([for (final p in percorso) p.meters], 10);
+    var fuori = 0.0;
+    for (var i = 1; i < fitto.length; i++) {
+      if (Geometry.pointToPolyline(fitto[i], linea) > 40) {
+        fuori += fitto[i - 1].distanceTo(fitto[i]);
+      }
+    }
+    return fuori;
+  }
+
+  /// Oltre questa distanza dalla linea l'incrocio dello stacco non e' dove
+  /// il bus la lascia.
+  static const _staccoSullaLinea = 80.0;
+
+  /// Il rientro sta almeno cosi' avanti allo stacco.
+  static const _avanti = 30.0;
+
+  /// Le vie di [parsed] sulla mappa, nell'ordine dell'avviso.
+  Future<({List<GeoPoint> punti, List<String> nonTrovate, bool inErrore})>
+  _cerca(
+    ParsedDeviation parsed,
+    RouteShape shape,
+    void Function(String phase)? onProgress,
+  ) async {
+    final punti = <GeoPoint>[];
+    final nonTrovate = <String>[];
+    var inErrore = false;
+    for (final t in parsed.allToponyms) {
+      // Il geocoding e' il passaggio piu' lento: una chiamata per via,
+      // con le pause di cortesia verso Photon. Vale la pena dire a che
+      // punto e', e quale via si sta cercando.
+      onProgress?.call('ricerca di «$t»');
+      final r = await _geocoder.locate(
+        t,
+        near: shape,
+        municipality: parsed.municipality,
+      );
+      if (r.isUsable) {
+        punti.add(r.point!);
+      } else {
+        nonTrovate.add(t);
+        if (r.status == GeocodeStatus.error) inErrore = true;
+      }
+    }
+    return (punti: punti, nonTrovate: nonTrovate, inErrore: inErrore);
+  }
+
+  /// Le vie, messe sulla linea normale, vanno all'indietro: la prima sta
+  /// piu' avanti dell'ultima. Con un margine, perche' un punto per via e'
+  /// impreciso.
+  static bool _alContrario(List<GeoPoint> punti, RouteShape shape) {
+    if (punti.length < 2) return false;
+    final primo = Rifinitura.aggancia(punti.first, shape).metri;
+    final ultimo = Rifinitura.aggancia(punti.last, shape).metri;
+    return ultimo < primo - _margineVerso;
+  }
+
+  static const _margineVerso = 200.0;
+}

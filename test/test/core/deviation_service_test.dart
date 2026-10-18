@@ -1,0 +1,775 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:gtt_deviazioni/core/deviation_service.dart';
+import 'package:gtt_deviazioni/core/geo/projection.dart';
+import 'package:gtt_deviazioni/core/models/notice.dart';
+import 'package:gtt_deviazioni/core/models/transit.dart';
+import 'package:gtt_deviazioni/core/llm/llm_client.dart';
+import 'package:gtt_deviazioni/core/net/gtt_http.dart';
+import 'package:gtt_deviazioni/core/pipeline/extractor.dart';
+import 'package:gtt_deviazioni/core/pipeline/geocoder.dart';
+import 'package:gtt_deviazioni/core/pipeline/stop_impact.dart';
+import 'package:gtt_deviazioni/core/pipeline/vie_osm.dart';
+import 'package:gtt_deviazioni/core/ricostruzione/ricostruzione.dart';
+
+/// Un LLM che non risponde mai: quota finita, rete assente, servizio giu'.
+/// Conta anche le richieste, che sono la risorsa scarsa: 50 al giorno.
+class _LlmSpento implements LlmClient {
+  int richieste = 0;
+
+  @override
+  String get name => 'spento';
+
+  @override
+  Future<String> complete(String prompt, {Map<String, dynamic>? jsonSchema}) {
+    richieste++;
+    return Future.error(LlmException(
+        'spento', 'rete non raggiungibile: SocketException'));
+  }
+}
+
+/// Photon che non trova niente, senza rete.
+class _GeocoderVuoto extends Geocoder {
+  @override
+  Future<GeocodeResult> locate(String toponym,
+          {required RouteShape near, String? municipality}) async =>
+      GeocodeResult.notFound(toponym);
+}
+
+/// Overpass giu': ogni chiamata risponde 504.
+class _OverpassGiu extends GttHttp {
+  @override
+  Future<String> getTextPolite(String url, {Duration? timeout}) async =>
+      throw GttHttpException(url, 504, 'tempo scaduto');
+}
+
+/// Quando qualcosa non funziona, chi usa l'app deve capire SE puo' fare
+/// qualcosa. "Errore" non aiuta nessuno; "hai finito le richieste di oggi"
+/// si', perche' dice anche che domani funzionera'.
+void main() {
+  String why(String? detail,
+          {ExtractionStatus status = ExtractionStatus.error,
+          DateTime? retryAfter}) =>
+      DeviationService.explainExtractionFailure(ExtractionResult(
+          status: status, detail: detail, retryAfter: retryAfter));
+
+  test('quota esaurita: dice QUANDO riprovare, in ora locale', () {
+    // Il fornitore ragiona in UTC; chi legge il messaggio all'una di notte
+    // no. Dire "mezzanotte UTC" alle 01:17 sembra semplicemente sbagliato.
+    final msg = why('LlmException(429): free-models-per-day exceeded',
+        retryAfter: DateTime(2026, 8, 1, 2, 0));
+    expect(msg, contains('Richieste gratuite'));
+    expect(msg, contains('02:00'));
+    expect(msg, isNot(contains('UTC')));
+  });
+
+  test('senza orario dal fornitore, dice comunque l ora locale', () {
+    // Mezzanotte UTC e' l'una d'inverno e le due d'estate: un «alle 2 di
+    // notte» fisso sbagliava per meta' dell'anno.
+    final msg = why('LlmException(429): free-models-per-day exceeded');
+    final atteso = DateTime.utc(DateTime.now().toUtc().year,
+            DateTime.now().toUtc().month, DateTime.now().toUtc().day + 1)
+        .toLocal();
+    expect(msg, contains('Richieste gratuite'));
+    expect(msg, contains('${atteso.hour.toString().padLeft(2, "0")}:00'));
+    expect(msg, isNot(contains('UTC')));
+  });
+
+  test('sovraccarico momentaneo e diverso da quota finita', () {
+    expect(why('LlmException(429): upstream busy'), contains('sovraccarico'));
+  });
+
+  test('chiave non valida: si corregge nelle impostazioni', () {
+    expect(why('LlmException(401): no auth'), contains('chiave'));
+  });
+
+  test('rete assente: dipende dalla connessione', () {
+    expect(why('rete non raggiungibile: SocketException'),
+        contains('connessione'));
+  });
+
+  test('testo illeggibile: nessun gergo tecnico verso l utente', () {
+    final msg = why(null, status: ExtractionStatus.parseFailed);
+    expect(msg, contains('percorso'));
+    for (final gergo in ['parseFailed', 'error', 'Exception', 'null']) {
+      expect(msg, isNot(contains(gergo)), reason: 'trapela "\$gergo"');
+    }
+  });
+
+  group('Quale direzione riguarda un avviso', () {
+    // Capolinea veri della linea 4.
+    final andata = RouteShape(
+      shapeId: '4:0',
+      routeId: '4U',
+      directionId: 0,
+      headsign: 'DERNA',
+      points: const [GeoPoint(45.07, 7.66), GeoPoint(45.09, 7.70)],
+    );
+    final ritorno = RouteShape(
+      shapeId: '4:1',
+      routeId: '4U',
+      directionId: 1,
+      headsign: 'MIRAFIORI SUD, STRADA DEL DROSSO',
+      points: const [GeoPoint(45.09, 7.70), GeoPoint(45.07, 7.66)],
+    );
+
+    RawNotice notice(String text, {String? direction}) => RawNotice(
+        id: 'n',
+        source: NoticeSource.gtfsRtAlert,
+        text: text,
+        directionHint: direction,
+        sourceUrl: '');
+
+    List<String> concerned(RawNotice n) =>
+        DeviationService.shapesConcernedBy(n, andata, ritorno)
+            .map((s) => s.headsign)
+            .toList();
+
+    test('"nella sola direzione Derna" riguarda solo l andata', () {
+      // Testo reale di GTT. Calcolare le fermate contro il ritorno darebbe
+      // fermate di un altro senso di marcia.
+      final r = concerned(notice(
+          'Linea 4 deviata nella sola direzione Derna. Da corso Turati '
+          'angolo corso Sommeiller per corso Re Umberto.'));
+      expect(r, equals(['DERNA']));
+    });
+
+    test('il capolinea composto si riconosce da una sua parte', () {
+      final r = concerned(notice(
+          'Linea 4 deviata in direzione strada del Drosso, per corso '
+          'Unione Sovietica.'));
+      expect(r, equals(['MIRAFIORI SUD, STRADA DEL DROSSO']));
+    });
+
+    test('la direzione puo arrivare dalla colonna della tabella', () {
+      final r = concerned(
+          notice('Da corso Turati deviata.', direction: 'Derna'));
+      expect(r, equals(['DERNA']));
+    });
+
+    test('se non si capisce si analizzano ENTRAMBE, non si indovina', () {
+      // Meglio due rapporti, uno superfluo, che uno riferito al senso di
+      // marcia sbagliato.
+      final r = concerned(notice('Linea 4 deviata per lavori stradali.'));
+      expect(r.length, equals(2));
+    });
+
+    test('"entrambe le direzioni" le prende tutte e due', () {
+      final r = concerned(
+          notice('Deviata in entrambe le direzioni.', direction: 'entrambe'));
+      expect(r.length, equals(2));
+    });
+
+    test('una linea con una direzione sola non si complica', () {
+      final r = DeviationService.shapesConcernedBy(
+          notice('qualsiasi cosa'), andata, null);
+      expect(r.length, equals(1));
+    });
+  });
+
+  group('Fermate sospese senza LLM', () {
+    // Il caso piu' facile e' anche quello che si perdeva piu' facilmente:
+    // "Fermata 3445 sospesa" non ha bisogno di nessun modello, il numero
+    // sta nel testo. Perderlo proprio quando la quota e' finita sarebbe
+    // il momento peggiore.
+    final fermata = TransitStop(
+      id: 'S3445',
+      code: '3445',
+      name: 'SABOTINO',
+      position: const GeoPoint(45.0700, 7.6650),
+    );
+    final linea = RouteShape(
+      shapeId: '15:0',
+      routeId: '15U',
+      directionId: 0,
+      headsign: 'SASSI',
+      points: const [GeoPoint(45.0700, 7.6600), GeoPoint(45.0700, 7.6900)],
+      stops: [fermata],
+    );
+    final index = GtfsIndex(
+      feedVersion: 'test',
+      builtAt: DateTime(2026),
+      lines: {'15U': const TransitLine(routeId: '15U', shortName: '15')},
+      shapes: {'15U': [linea]},
+      stops: {fermata.id: fermata},
+    );
+    final service = DeviationService(index: index, llm: _LlmSpento());
+
+    final avviso = RawNotice(
+      id: 'a1',
+      source: NoticeSource.gtfsRtAlert,
+      text: 'Fermata n. 3445 Sabotino temporaneamente sospesa. '
+          'Causa lavori stradali.',
+      routeIds: const ['15U'],
+      sourceUrl: '',
+    );
+
+    test('la fermata resta segnata anche con l LLM giu', () async {
+      final status = await service.statusOf(
+          const TransitLine(routeId: '15U', shortName: '15'),
+          allNotices: [avviso]);
+
+      final saltate = status.allSkippedStops;
+      expect(saltate.map((s) => s.stop.code), contains('3445'));
+      expect(saltate.single.status, equals(StopStatus.declaredSuspended));
+    });
+
+    test('ma non si spaccia per ricostruita', () async {
+      // Senza estrazione non sappiamo se l'avviso dica anche altro: la
+      // fermata e' certa, il resto no, e va detto.
+      final status = await service.statusOf(
+          const TransitLine(routeId: '15U', shortName: '15'),
+          allNotices: [avviso]);
+
+      final r = status.reports.single;
+      expect(r.confidence, equals(Confidence.probabile));
+      expect(r.whyIncomplete, contains('connessione'));
+      expect(r.deviatedGeometry, isNull);
+    });
+
+    test('senza codici nel testo resta solo il testo di GTT', () async {
+      final status = await service.statusOf(
+        const TransitLine(routeId: '15U', shortName: '15'),
+        allNotices: [
+          RawNotice(
+            id: 'a2',
+            source: NoticeSource.gtfsRtAlert,
+            text: 'Linea 15 deviata per lavori stradali in via Sabotino.',
+            routeIds: const ['15U'],
+            sourceUrl: '',
+          )
+        ],
+      );
+      expect(status.reports.single.confidence, equals(Confidence.soloTesto));
+      expect(status.allSkippedStops, isEmpty);
+    });
+  });
+
+  group('Le due fonti non si contano due volte', () {
+    // Il caso visto dal vivo sulla 65 l'01/08/2026: la deviazione IREN di
+    // via Lessona arrivava sia dal feed sia dalla tabella e compariva due
+    // volte nel dettaglio della linea, con la copia dall'alert marcata
+    // "in corso" e quella della tabella "comincia il 3".
+    final linea65 = RouteShape(
+      shapeId: '65:0',
+      routeId: '65U',
+      directionId: 0,
+      headsign: 'CORSO BOLZANO',
+      points: const [GeoPoint(45.0800, 7.6600), GeoPoint(45.0850, 7.6700)],
+    );
+    final index = GtfsIndex(
+      feedVersion: 'test',
+      builtAt: DateTime(2026),
+      lines: {'65U': const TransitLine(routeId: '65U', shortName: '65')},
+      shapes: {'65U': [linea65]},
+      stops: const {},
+    );
+    const linea = TransitLine(routeId: '65U', shortName: '65');
+
+    final dalFeed = RawNotice(
+      id: 'alert-65',
+      source: NoticeSource.gtfsRtAlert,
+      headline: 'Linea 65 deviata in direzione corso Bolzano',
+      text: 'dalle 8:00 di lunedì 3 sino alle 18:00 di venerdì 7 agosto '
+          '2026. Da via Asinari di Bernezzo angolo corso Monte Grappa, per '
+          'via Asinari di Bernezzo, piazza Chironi, via Medici, corso '
+          'Lecce, via Lessona, segue percorso normale. Causa lavori IREN '
+          'teleriscaldamento in via Lessona angolo corso Monte Grappa.',
+      routeIds: const ['65U'],
+      // MISURATO: 161 alert su 161 hanno lo start nel passato, perche' e'
+      // l'ora di pubblicazione.
+      validFrom: DateTime(2026, 7, 31, 8, 16),
+      validUntil: DateTime(2026, 8, 7, 16, 59),
+      sourceUrl: '',
+    );
+    final dallaTabella = RawNotice(
+      id: 'web-65',
+      source: NoticeSource.webVariazioni,
+      text: 'Da via Asinari di Bernezzo angolo corso Monte Grappa prosegue '
+          'per via Asinari di Bernezzo, piazza Chironi, via Medici, corso '
+          'Lecce, via Lessona, percorso normale.',
+      lineHints: const ['65'],
+      directionHint: 'corso Bolzano',
+      validFrom: DateTime(2026, 8, 3, 8, 0),
+      validUntil: DateTime(2026, 8, 7, 18, 0),
+      sourceUrl: '',
+    );
+
+    test('la linea vede un avviso solo, con la data buona', () {
+      final service = DeviationService(index: index, llm: _LlmSpento());
+      final mie = service.noticesFor(linea, [dalFeed, dallaTabella]);
+
+      expect(mie.length, equals(1));
+      expect(mie.single.validFrom, equals(DateTime(2026, 8, 3, 8, 0)));
+      expect(mie.single.startsAfter(DateTime(2026, 8, 1, 14, 0)), isTrue);
+    });
+
+    test('e una richiesta LLM invece di due', () async {
+      // Ogni avviso costa una richiesta e ce ne sono 50 gratuite al
+      // giorno: il doppione non sprecava solo spazio sullo schermo.
+      final llm = _LlmSpento();
+      final service = DeviationService(index: index, llm: llm);
+      await service.statusOf(linea, allNotices: [dalFeed, dallaTabella]);
+      expect(llm.richieste, equals(1));
+    });
+
+    test('la deviazione resta una anche nel rapporto finale', () async {
+      final service = DeviationService(index: index, llm: _LlmSpento());
+      final status =
+          await service.statusOf(linea, allNotices: [dalFeed, dallaTabella]);
+      expect(status.reports.length, equals(1));
+      // Il testo di GTT che si mostra e' il piu' completo dei due.
+      expect(status.reports.single.notice.text, contains('Causa lavori IREN'));
+    });
+
+    test('due linee diverse tengono ognuna il suo avviso', () {
+      // La stessa riga della tabella vale spesso per piu' linee: unirla
+      // all'alert di una non deve toglierla alle altre.
+      final index2 = GtfsIndex(
+        feedVersion: 'test',
+        builtAt: DateTime(2026),
+        lines: {
+          '65U': const TransitLine(routeId: '65U', shortName: '65'),
+          '68U': const TransitLine(routeId: '68U', shortName: '68'),
+        },
+        shapes: {'65U': [linea65]},
+        stops: const {},
+      );
+      final perDue = RawNotice(
+        id: 'web-due',
+        source: NoticeSource.webVariazioni,
+        text: dallaTabella.text,
+        lineHints: const ['65 - 68'],
+        sourceUrl: '',
+      );
+      final service = DeviationService(index: index2, llm: _LlmSpento());
+
+      expect(service.noticesFor(linea, [dalFeed, perDue]).length, equals(1));
+      expect(
+          service
+              .noticesFor(
+                  const TransitLine(routeId: '68U', shortName: '68'),
+                  [dalFeed, perDue])
+              .single
+              .isMerged,
+          isFalse);
+    });
+  });
+
+  group('Programmata ma non ancora attiva', () {
+    // MISURATO (01/08/2026): 9 righe su 47 di /cms/variazioni partono in
+    // futuro, una a 23 giorni. Nel feed protobuf 0 su 162. Dire "la tua
+    // fermata non e' servita" per il 24 agosto e' rispondere a un'altra
+    // domanda.
+    final oggi = DateTime(2026, 8, 1, 14, 30);
+
+    RawNotice avviso(DateTime? da) => RawNotice(
+        id: 'n',
+        source: NoticeSource.webVariazioni,
+        text: 'Linea 4 deviata.',
+        validFrom: da,
+        sourceUrl: '');
+
+    test('parte fra tre settimane: non e attiva', () {
+      expect(avviso(DateTime(2026, 8, 24)).startsAfter(oggi), isTrue);
+      expect(avviso(DateTime(2026, 8, 24)).daysUntilStart(oggi), equals(23));
+    });
+
+    test('parte OGGI: e attiva, anche se validFrom e a mezzanotte', () {
+      // La trappola: 01/08 00:00 e' prima di adesso, ma la variazione di
+      // oggi e' in corso. Si confrontano le date, non gli istanti.
+      final n = avviso(DateTime(2026, 8, 1));
+      expect(n.startsAfter(oggi), isFalse);
+      expect(n.daysUntilStart(oggi), isNull);
+    });
+
+    test('parte domani: non e ancora attiva', () {
+      expect(avviso(DateTime(2026, 8, 2)).daysUntilStart(oggi), equals(1));
+    });
+
+    test('cominciata a luglio: attiva', () {
+      expect(avviso(DateTime(2026, 7, 15)).startsAfter(oggi), isFalse);
+    });
+
+    test('senza data si considera in corso, non si indovina', () {
+      // Il feed protobuf non sempre da' il periodo. Nasconderla perche'
+      // non sappiamo quando parte sarebbe il danno peggiore.
+      expect(avviso(null).startsAfter(oggi), isFalse);
+    });
+  });
+  group('Alternative guardando la linea intera', () {
+    // Visto sulla 10N il 26/09: sedici avvisi, uno per fermata, e ognuno
+    // proponeva come alternative le fermate chiuse dagli altri.
+    TransitStop stop(String code, double lon) => TransitStop(
+        id: 'S$code',
+        code: code,
+        name: 'Fermata $code - PROVA $code',
+        position: GeoPoint(45.0700, lon));
+
+    final percorso = RouteShape(
+      shapeId: 'T:0',
+      routeId: 'TU',
+      directionId: 0,
+      headsign: 'PROVA',
+      points: const [GeoPoint(45.0700, 7.6600), GeoPoint(45.0700, 7.6800)],
+      stops: [
+        stop('1', 7.6610),
+        stop('2', 7.6640),
+        stop('3', 7.6670),
+        stop('4', 7.6700),
+        stop('5', 7.6730),
+      ],
+    );
+    final index = GtfsIndex(
+      feedVersion: 't',
+      builtAt: DateTime(2026),
+      lines: {'TU': const TransitLine(routeId: 'TU', shortName: 'T')},
+      shapes: {'TU': [percorso]},
+      stops: {for (final s in percorso.stops) s.id: s},
+    );
+    final analyzer = StopImpactAnalyzer(index: index);
+    final oggi = DateTime(2026, 9, 26, 17);
+
+    DeviationReport chiude(String code, {DateTime? da}) => DeviationReport(
+          notice: RawNotice(
+              id: 'n$code',
+              source: NoticeSource.gtfsRtAlert,
+              text: 'La linea non transita dalla fermata $code.',
+              validFrom: da,
+              sourceUrl: ''),
+          confidence: Confidence.confermata,
+          shape: percorso,
+          impact: analyzer.declaredOnly(
+              officialRoute: percorso, declaredCodes: {code}),
+        );
+
+    Iterable<String?> alternative(DeviationReport r) =>
+        r.skippedStops.single.alternatives.map((a) => a.stop.code);
+
+    test('un avviso non propone le fermate chiuse da un altro', () {
+      final prima = [chiude('2'), chiude('3')];
+      // Da soli si propongono a vicenda: e' il difetto.
+      expect(alternative(prima[0]), contains('3'));
+
+      final dopo = DeviationReport.reconcileAlternatives(prima,
+          analyzer: analyzer, now: oggi);
+      expect(alternative(dopo[0]), isNot(contains('3')));
+      expect(alternative(dopo[1]), isNot(contains('2')));
+      expect(alternative(dopo[0]), contains('1'));
+    });
+
+    test('una chiusura in programma non toglie alternative di oggi', () {
+      final dopo = DeviationReport.reconcileAlternatives(
+          [chiude('3'), chiude('4', da: DateTime(2026, 10, 12))],
+          analyzer: analyzer,
+          now: oggi);
+      // La 4 chiude fra due settimane: oggi e' aperta.
+      expect(alternative(dopo[0]), contains('4'));
+      // Per l'avviso di ottobre invece la 3 va evitata: non si sa se
+      // allora sara' gia' riaperta.
+      expect(alternative(dopo[1]), isNot(contains('3')));
+    });
+  });
+  group('Richieste risparmiate', () {
+    // Il 26/09 la quota di 50 richieste e' finita in poche ore: la 10N
+    // coi suoi sedici avvisi ne costava trentadue, perche' ogni avviso si
+    // leggeva una volta per direzione, e ogni «Aggiorna» rileggeva tutto.
+    final andata = RouteShape(
+      shapeId: 'T:0',
+      routeId: 'TU',
+      directionId: 0,
+      headsign: 'PIAZZA ALFA',
+      points: const [GeoPoint(45.0700, 7.6600), GeoPoint(45.0700, 7.6900)],
+      tripCount: 10,
+    );
+    final ritorno = RouteShape(
+      shapeId: 'T:1',
+      routeId: 'TU',
+      directionId: 1,
+      headsign: 'PIAZZA BETA',
+      points: const [GeoPoint(45.0700, 7.6900), GeoPoint(45.0700, 7.6600)],
+      tripCount: 10,
+    );
+    final index = GtfsIndex(
+      feedVersion: 't',
+      builtAt: DateTime(2026),
+      lines: {'TU': const TransitLine(routeId: 'TU', shortName: 'T')},
+      shapes: {'TU': [andata, ritorno]},
+      stops: const {},
+    );
+    const linea = TransitLine(routeId: 'TU', shortName: 'T');
+    // Non nomina nessun capolinea: vale per tutte e due le direzioni.
+    RawNotice avviso({String testo = 'Linea T deviata in via Roma.'}) =>
+        RawNotice(
+          id: 'n1',
+          source: NoticeSource.gtfsRtAlert,
+          text: testo,
+          routeIds: const ['TU'],
+          sourceUrl: '',
+        );
+
+    LineStatus precedente({required bool retryable, String? testo}) {
+      final n = testo == null ? avviso() : avviso(testo: testo);
+      return LineStatus(
+        line: linea,
+        shape: andata,
+        shapeReturn: ritorno,
+        checkedAt: DateTime(2026, 9, 26),
+        reports: [
+          for (final s in [andata, ritorno])
+            DeviationReport(
+              notice: n,
+              shape: s,
+              confidence: Confidence.soloTesto,
+              retryable: retryable,
+            ),
+        ],
+      );
+    }
+
+    test('un avviso per due direzioni costa una richiesta, non due', () async {
+      final llm = _LlmSpento();
+      final status = await DeviationService(index: index, llm: llm)
+          .statusOf(linea, allNotices: [avviso()]);
+      expect(status.reports.length, equals(2));
+      expect(llm.richieste, equals(1));
+    });
+
+    test('un avviso gia letto e uguale non si rilegge', () async {
+      final llm = _LlmSpento();
+      final prima = precedente(retryable: false);
+      final status = await DeviationService(index: index, llm: llm)
+          .statusOf(linea, allNotices: [avviso()], previous: prima);
+      expect(llm.richieste, isZero);
+      expect(status.reports.map((r) => r.shape.shapeId),
+          equals(['T:0', 'T:1']));
+    });
+
+    test('se era fallito per la quota si ritenta', () async {
+      final llm = _LlmSpento();
+      await DeviationService(index: index, llm: llm).statusOf(linea,
+          allNotices: [avviso()], previous: precedente(retryable: true));
+      expect(llm.richieste, equals(1));
+    });
+
+    test('se GTT ha cambiato il testo si rilegge', () async {
+      final llm = _LlmSpento();
+      await DeviationService(index: index, llm: llm).statusOf(linea,
+          allNotices: [avviso(testo: 'Linea T deviata in via Po.')],
+          previous: precedente(retryable: false));
+      expect(llm.richieste, equals(1));
+    });
+
+    // Una lettura che non porta in rete: una sostituzione di mezzo non ha
+    // percorso da calcolare. Basta a vedere che il modello non si chiama.
+    const letta = ParsedDeviation(
+      type: DeviationType.sostituzioneModale,
+      viaSequence: ['via Roma'],
+    );
+    LineStatus conLettura({int algoritmo = 1, bool retryable = false}) =>
+        LineStatus(
+          line: linea,
+          shape: andata,
+          shapeReturn: ritorno,
+          checkedAt: DateTime(2026, 9, 26),
+          reports: [
+            for (final s in [andata, ritorno])
+              DeviationReport(
+                notice: avviso(),
+                shape: s,
+                confidence: Confidence.probabile,
+                retryable: retryable,
+                algoritmo: algoritmo,
+                letture: const [letta],
+              ),
+          ],
+        );
+
+    test('cambiando algoritmo, senza lettura salvata e senza riletture '
+        'concesse, si tiene l\'esito vecchio', () async {
+      // Rileggere tutto insieme mangerebbe la quota e lascerebbe le linee
+      // col solo testo: l'avviso aspetta il suo turno.
+      final llm = _LlmSpento();
+      final status = await DeviationService(
+        index: index,
+        llm: llm,
+        algoritmo: AlgoritmoPercorsi.secondo,
+        rilettureCambioAlgoritmo: 0,
+      ).statusOf(linea,
+          allNotices: [avviso()], previous: precedente(retryable: false));
+      expect(llm.richieste, isZero);
+      expect(status.reports.every((r) => r.algoritmo == 1), isTrue);
+    });
+
+    test('se la rilettura per cambiare algoritmo non riesce, resta il vecchio',
+        () async {
+      // Il modello non risponde (quota finita): l'avviso non deve perdere
+      // il disegno che aveva per restare col solo testo di GTT.
+      final llm = _LlmSpento();
+      final status = await DeviationService(
+        index: index,
+        llm: llm,
+        algoritmo: AlgoritmoPercorsi.secondo,
+      ).statusOf(linea,
+          allNotices: [avviso()], previous: precedente(retryable: false));
+      expect(llm.richieste, equals(1));
+      expect(status.reports.every((r) => r.algoritmo == 1), isTrue);
+      expect(status.reports.every((r) => !r.retryable), isTrue);
+    });
+
+    test('cambiando algoritmo la lettura salvata si riusa, senza modello',
+        () async {
+      final llm = _LlmSpento();
+      final status = await DeviationService(
+        index: index,
+        llm: llm,
+        algoritmo: AlgoritmoPercorsi.secondo,
+      ).statusOf(linea, allNotices: [avviso()], previous: conLettura());
+      expect(llm.richieste, isZero);
+      expect(status.reports.every((r) => r.algoritmo == 2), isTrue);
+      expect(status.reports.first.letture.single.type,
+          DeviationType.sostituzioneModale);
+      expect(status.reports.first.confidence, Confidence.confermata);
+    });
+
+    test('passato il tempo del giro, il cambio di algoritmo aspetta',
+        () async {
+      // Anche con la lettura salvata: rifare tutti gli avvisi con le vie
+      // di OpenStreetMap puo' superare il limite del job, che allora non
+      // pubblica niente.
+      final llm = _LlmSpento();
+      final status = await DeviationService(
+        index: index,
+        llm: llm,
+        algoritmo: AlgoritmoPercorsi.secondo,
+        scadenzaCambioAlgoritmo: DateTime(2000),
+      ).statusOf(linea, allNotices: [avviso()], previous: conLettura());
+      expect(llm.richieste, isZero);
+      expect(status.reports.every((r) => r.algoritmo == 1), isTrue);
+    });
+
+    test('passando al secondo, se le vie non rispondono resta il vecchio',
+        () async {
+      // Il secondo ha bisogno delle vie di OpenStreetMap. Se Overpass non
+      // risponde proprio il giorno in cui si accende, gli avvisi non
+      // devono perdere il percorso del primo per restare col solo testo.
+      const deviata = ParsedDeviation(
+        type: DeviationType.deviazione,
+        detachStreet: 'via Roma',
+        viaSequence: ['via Po', 'via Garibaldi'],
+      );
+      LineStatus prima({required int algoritmo, required bool retryable}) =>
+          LineStatus(
+            line: linea,
+            shape: andata,
+            shapeReturn: ritorno,
+            checkedAt: DateTime(2026, 9, 26),
+            reports: [
+              for (final s in [andata, ritorno])
+                DeviationReport(
+                  notice: avviso(),
+                  shape: s,
+                  confidence: Confidence.probabile,
+                  retryable: retryable,
+                  algoritmo: algoritmo,
+                  letture: const [deviata],
+                ),
+            ],
+          );
+      DeviationService servizio(LlmClient llm) => DeviationService(
+            index: index,
+            llm: llm,
+            algoritmo: AlgoritmoPercorsi.secondo,
+            geocoder: _GeocoderVuoto(),
+            vie: ViePerNome(http: _OverpassGiu(), pausa: Duration.zero),
+          );
+      final llm = _LlmSpento();
+      final status = await servizio(llm).statusOf(linea,
+          allNotices: [avviso()],
+          previous: prima(algoritmo: 1, retryable: false));
+      expect(llm.richieste, isZero);
+      expect(status.reports, hasLength(2));
+      expect(status.reports.every((r) => r.algoritmo == 1), isTrue);
+
+      // Un avviso gia' del secondo, da rifare, aspetta col solo testo.
+      final ancora = await servizio(llm).statusOf(linea,
+          allNotices: [avviso()],
+          previous: prima(algoritmo: 2, retryable: true));
+      expect(
+          ancora.reports.every((r) => r.confidence == Confidence.soloTesto),
+          isTrue);
+      expect(ancora.reports.every((r) => r.retryable), isTrue);
+    });
+
+    test('dopo un errore di rete si rifa l\'analisi, non la lettura',
+        () async {
+      final llm = _LlmSpento();
+      await DeviationService(index: index, llm: llm).statusOf(linea,
+          allNotices: [avviso()], previous: conLettura(retryable: true));
+      expect(llm.richieste, isZero);
+    });
+
+    test('se GTT cambia il testo la lettura salvata non vale piu\'',
+        () async {
+      final llm = _LlmSpento();
+      await DeviationService(index: index, llm: llm).statusOf(linea,
+          allNotices: [avviso(testo: 'Linea T deviata in via Po.')],
+          previous: conLettura(algoritmo: 2));
+      expect(llm.richieste, equals(1));
+    });
+
+    test('col secondo algoritmo una direzione sola resta sola', () async {
+      // Il testo non nomina nessun capolinea, la lettura si': «direzione
+      // piazza Alfa». Il primo analizza tutte e due le direzioni, il
+      // secondo solo quella giusta.
+      const soloAlfa = ParsedDeviation(
+        type: DeviationType.sostituzioneModale,
+        directionDesc: 'direzione piazza Alfa',
+        viaSequence: ['via Roma'],
+      );
+      LineStatus prima(int algoritmo) => LineStatus(
+            line: linea,
+            shape: andata,
+            shapeReturn: ritorno,
+            checkedAt: DateTime(2026, 9, 26),
+            reports: [
+              DeviationReport(
+                notice: avviso(),
+                shape: andata,
+                confidence: Confidence.probabile,
+                retryable: true,
+                algoritmo: algoritmo,
+                letture: const [soloAlfa],
+              ),
+            ],
+          );
+      final uno = await DeviationService(index: index, llm: _LlmSpento())
+          .statusOf(linea, allNotices: [avviso()], previous: prima(1));
+      final due = await DeviationService(
+        index: index,
+        llm: _LlmSpento(),
+        algoritmo: AlgoritmoPercorsi.secondo,
+      ).statusOf(linea, allNotices: [avviso()], previous: prima(2));
+      expect(uno.reports.length, 2);
+      expect(due.reports.map((r) => r.shape.shapeId), ['T:0']);
+    });
+
+    test('l\'algoritmo si sceglie con 1 o 2, e nel dubbio e\' il primo', () {
+      expect(AlgoritmoPercorsi.daTesto('2'), AlgoritmoPercorsi.secondo);
+      expect(AlgoritmoPercorsi.daTesto(' 2 '), AlgoritmoPercorsi.secondo);
+      expect(AlgoritmoPercorsi.daTesto('1'), AlgoritmoPercorsi.primo);
+      expect(AlgoritmoPercorsi.daTesto(''), AlgoritmoPercorsi.primo);
+      expect(AlgoritmoPercorsi.daTesto(null), AlgoritmoPercorsi.primo);
+      expect(AlgoritmoPercorsi.daTesto('due'), AlgoritmoPercorsi.primo);
+    });
+
+    test('un errore del modello e da ritentare, e al giro dopo si ritenta',
+        () async {
+      final llm = _LlmSpento();
+      final service = DeviationService(index: index, llm: llm);
+      final primo = await service.statusOf(linea, allNotices: [avviso()]);
+      expect(primo.reports.every((r) => r.retryable), isTrue);
+      await service.statusOf(linea, allNotices: [avviso()], previous: primo);
+      expect(llm.richieste, equals(2));
+    });
+  });
+}

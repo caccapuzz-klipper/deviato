@@ -1,0 +1,1112 @@
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+
+import '../core/deviation_service.dart';
+import '../core/models/notice.dart';
+import '../core/models/saved_stop.dart';
+import '../core/models/transit.dart';
+import '../core/pipeline/stop_impact.dart';
+import '../core/text/display_names.dart';
+import '../core/text/periodo_avviso.dart';
+import '../data/app_repository.dart';
+import 'apple_theme.dart';
+import 'full_map_screen.dart';
+import 'line_badge.dart';
+import 'line_map.dart';
+import 'live_watch_card.dart';
+import 'quando_avviso.dart';
+import 'riassunto.dart';
+import 'stop_screen.dart';
+
+/// Il dettaglio di una linea: cosa succede, dove, e cosa fare.
+///
+/// L'ordine conta. Prima la risposta — quali fermate non sono servite e
+/// dove salire invece — detta per tratti e non per avviso; poi la mappa,
+/// che serve a confermare; poi gli avvisi, e in fondo sempre il testo
+/// originale di GTT, cosi' se il sistema sbaglia il dato grezzo resta a
+/// disposizione (§6.2). I mezzi in tempo reale si aprono da un pulsante
+/// che fluttua in basso al centro: prima erano una scheda in fondo alla
+/// lista, e con due avvisi aperti bisognava scorrere fino alla fine per
+/// trovarla.
+class LineScreen extends StatefulWidget {
+  const LineScreen({
+    required this.repo,
+    required this.line,
+    this.initialStopId,
+    super.key,
+  });
+
+  final AppRepository repo;
+  final TransitLine line;
+
+  /// La fermata da mostrare subito sulla mappa: quella salvata da cui si
+  /// e' arrivati.
+  final String? initialStopId;
+
+  @override
+  State<LineScreen> createState() => _LineScreenState();
+}
+
+class _LineScreenState extends State<LineScreen> {
+  // L'osservazione NON sta qui: sta nel repository, perche' deve
+  // continuare anche quando questa schermata viene chiusa.
+
+  /// Oltre questo numero gli avvisi si raccolgono in una voce chiusa.
+  ///
+  /// La 10N il 26/09 ne aveva sedici, uno per fermata: sedici schede
+  /// quasi uguali, e la risposta vera spariva in fondo. Il riassunto in
+  /// cima la dice gia'; gli avvisi restano a un tocco.
+  static const _avvisiApertiMax = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dopo il frame: cambiarlo durante la costruzione farebbe partire un
+    // notifyListeners mentre l'albero si sta ancora montando.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.repo.setVisibleLine(widget.line.routeId),
+    );
+  }
+
+  @override
+  void dispose() {
+    // La striscia in cima sta FUORI dal Navigator: uscendo di qui non
+    // viene ricostruita da sola, va avvisata. Senza questo ricompariva
+    // solo al primo aggiornamento successivo — cioe' aprendo un'altra
+    // linea o ricontrollando qualcosa.
+    //
+    // Dopo il frame, perche' durante lo smontaggio non si puo' far
+    // ricostruire l'albero.
+    final routeId = widget.line.routeId;
+    final repo = widget.repo;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => repo.clearVisibleLine(routeId),
+    );
+    super.dispose();
+  }
+
+  final _mappa = GlobalKey();
+
+  void _startWatch() => widget.repo.startWatch(widget.line);
+
+  /// Il pannello dei mezzi, dal fondo.
+  ///
+  /// Si ricostruisce da solo mentre l'osservazione va avanti: ascolta il
+  /// repository, come la schermata. Quando si fa partire, si chiude e la
+  /// pagina scorre alla mappa: e' li' che i mezzi compaiono.
+  Future<void> _apriMezzi() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: AppleColors.secondarySystemGroupedBackground(context),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheet) => ListenableBuilder(
+      listenable: widget.repo,
+      builder: (sheet, _) {
+        final status = widget.repo.statusOf(widget.line.routeId);
+        if (status == null) return const SizedBox.shrink();
+        final osservando = widget.repo.isWatching(widget.line.routeId);
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: LiveWatchCard(
+              inCard: false,
+              running: osservando,
+              samples: widget.repo.watchSamples,
+              liveTracks: osservando ? widget.repo.liveTracks : const [],
+              result: widget.repo.watchResultOf(widget.line.routeId),
+              error: widget.repo.watchError,
+              shape: status.shape,
+              altraLinea: widget.repo.watchingRouteId != null && !osservando
+                  ? widget.repo.watchingLineName
+                  : null,
+              onStart: () {
+                _startWatch();
+                Navigator.pop(sheet);
+                _vaiAllaMappa();
+              },
+              onStop: widget.repo.stopWatch,
+            ),
+          ),
+        );
+      },
+    ),
+  );
+
+  void _apriMappa() => Navigator.push(
+    context,
+    MaterialPageRoute<void>(
+      builder: (_) => FullMapScreen(
+        repo: widget.repo,
+        line: widget.line,
+        isSaved: (stop, shape) => widget.repo.isSaved(_salvata(stop, shape)),
+        onToggleSave: (stop, shape) => _salva(stop, shape),
+      ),
+    ),
+  );
+
+  void _vaiAllaMappa() {
+    final c = _mappa.currentContext;
+    if (c == null) return;
+    Scrollable.ensureVisible(
+      c,
+      duration: const Duration(milliseconds: 300),
+      alignment: 0.05,
+    );
+  }
+
+  SavedStop _salvata(TransitStop stop, RouteShape shape) => SavedStop(
+    routeId: widget.line.routeId,
+    directionId: shape.directionId,
+    stopId: stop.id,
+    stopCode: stop.code,
+  );
+
+  /// Salva la fermata, o la toglie se c'era gia'.
+  Future<void> _salva(TransitStop stop, RouteShape shape) async {
+    final s = _salvata(stop, shape);
+    final messenger = ScaffoldMessenger.of(context);
+    if (widget.repo.isSaved(s)) {
+      await widget.repo.unsaveStop(s);
+      messenger.showSnackBar(const SnackBar(content: Text('Fermata rimossa')));
+    } else {
+      await widget.repo.saveStop(s);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${DisplayNames.stop(stop)} salvata nelle tue '
+            'fermate',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// "controllata alle 19:08" se e' di oggi, "ieri alle 19:08" se no.
+  ///
+  /// Da quando gli esiti sopravvivono alla chiusura dell'app, la sola ora
+  /// non basta piu': un esito di ieri sera mostrato come "alle 19:08"
+  /// sembrerebbe di adesso, ed e' esattamente il tipo di bugia che questo
+  /// progetto non si permette.
+  String get _checkedLabel {
+    final t = widget.repo.checkedAt(widget.line.routeId);
+    if (t == null) return '';
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+
+    final oggi = DateTime.now();
+    final giorno = DateTime(t.year, t.month, t.day);
+    final scarto = DateTime(
+      oggi.year,
+      oggi.month,
+      oggi.day,
+    ).difference(giorno).inDays;
+
+    return switch (scarto) {
+      0 => 'aggiornata alle $h:$m',
+      1 => 'aggiornata ieri alle $h:$m',
+      _ => 'aggiornata il ${t.day}/${t.month} alle $h:$m',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Si ascolta il repository perche' il controllo della singola linea
+    // avviene da qui: il risultato deve comparire senza tornare indietro.
+    return ListenableBuilder(
+      listenable: widget.repo,
+      builder: (context, _) => _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    final status = widget.repo.statusOf(widget.line.routeId);
+    // La schermata si apre solo su una linea gia' controllata, ma toglierla
+    // dalla watchlist mentre e' aperta la lascerebbe senza dati.
+    if (status == null) return const Scaffold(body: SizedBox.shrink());
+    final checking = widget.repo.isRefreshingAll;
+    final osservando = widget.repo.isWatching(widget.line.routeId);
+    final esito = widget.repo.watchResultOf(widget.line.routeId);
+    final attivi = _perAvviso(status.activeReports);
+    final futuri = _perAvviso(status.scheduledReports);
+    final altriOrari = _perAvviso(status.otherTimeReports);
+    final finiti = _perAvviso(status.endedReports);
+
+    return Scaffold(
+      backgroundColor: AppleColors.systemGroupedBackground(context),
+      appBar: AppBar(
+        titleSpacing: 0,
+        backgroundColor: AppleColors.systemBackground(context).withValues(alpha: 0.85),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Row(
+          children: [
+            LineBadge(line: status.line, height: 28),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                'Linea ${status.line.shortName}',
+                style: AppleTypography.headline(context),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        // Come nella home: si aggiorna da solo e tirando giu' la pagina; il
+        // pulsante compare solo se l'ultimo tentativo non e' riuscito.
+        actions: [
+          if (checking)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 18),
+              child: Center(
+                child: CupertinoActivityIndicator(radius: 9),
+              ),
+            )
+          else if (widget.repo.offline)
+            IconButton(
+              icon: const Icon(CupertinoIcons.arrow_clockwise),
+              tooltip: 'Riprova',
+              onPressed: widget.repo.refreshAll,
+            ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(24),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: AppleColors.separator(context),
+                  width: 0.5,
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                [
+                  if (_checkedLabel.isNotEmpty) _maiuscola(_checkedLabel),
+                  if (status.line.longName != null)
+                    DisplayNames.routeParts(status.line.longName!).route,
+                ].join('  ·  '),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppleColors.secondaryLabel(context),
+                  letterSpacing: -0.1,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _PulsanteMezzi(
+        osservando: osservando,
+        mezzi: osservando ? widget.repo.liveTracks.length : 0,
+        esito: esito != null,
+        onPressed: _apriMezzi,
+      ),
+      body: RefreshIndicator(
+        color: AppleColors.systemBlue,
+        onRefresh: widget.repo.refreshAll,
+        child: ListView(
+          // Spazio in fondo per il pulsante dei mezzi, che fluttua sopra.
+          padding: const EdgeInsets.only(bottom: 96),
+          children: [
+            RiassuntoLinea(status: status),
+            // La mappa c'e' SEMPRE: vedere dove passa la linea serve anche
+            // quando la deviazione non si e' potuta ricostruire.
+            LineMap(
+              key: _mappa,
+              status: status,
+              vehicles: osservando ? widget.repo.liveTracks : const [],
+              observed: esito?.consensus,
+              initialStopId: widget.initialStopId,
+              isSaved: (stop, shape) =>
+                  widget.repo.isSaved(_salvata(stop, shape)),
+              onToggleSave: (stop, shape) => _salva(stop, shape),
+              onOpenFullScreen: _apriMappa,
+              onToggleWatch: osservando ? widget.repo.stopWatch : _startWatch,
+              watching: osservando,
+              watchCount: widget.repo.liveTracks.length,
+              onOpenArrivals: (stop) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        StopScreen(stop: stop, repo: widget.repo),
+                  ),
+                );
+              },
+            ),
+
+            if (attivi.isNotEmpty) ...[
+              if (attivi.length > _avvisiApertiMax)
+                _AvvisiRaccolti(
+                  count: attivi.length,
+                  children: [
+                    for (final g in attivi)
+                      _ReportCard(reports: g, status: status),
+                  ],
+                )
+              else ...[
+                _Intestazione(
+                  attivi.length == 1 ? 'Avviso di GTT' : 'Avvisi di GTT',
+                ),
+                for (final g in attivi) _ReportCard(reports: g, status: status),
+              ],
+            ],
+
+            // Dopo cio' che succede adesso: sapere del 24 agosto e' utile,
+            // ma non e' la risposta alla domanda di oggi.
+            if (futuri.isNotEmpty) ...[
+              const _Intestazione('In programma'),
+              for (final g in futuri) _ReportCard(reports: g, status: status),
+            ],
+            // In vigore, ma solo certi giorni od orari: adesso le fermate
+            // sono servite, e la scheda dice quando non lo saranno.
+            if (altriOrari.isNotEmpty) ...[
+              const _Intestazione('In altri giorni o orari'),
+              for (final g in altriOrari)
+                _ReportCard(reports: g, status: status),
+            ],
+            // Finiti secondo il loro testo, ma ancora pubblicati da GTT: in
+            // fondo, col testo e senza fermate non servite.
+            if (finiti.isNotEmpty) ...[
+              const _Intestazione('Terminati'),
+              for (final g in finiti) _ReportCard(reports: g, status: status),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Il pulsante dei mezzi in tempo reale, in basso al centro.
+///
+/// Dice a che punto e' l'osservazione anche da chiuso: quanti mezzi sono
+/// sulla mappa mentre si guarda, e che c'e' un esito da leggere quando e'
+/// finita.
+class _PulsanteMezzi extends StatelessWidget {
+  const _PulsanteMezzi({
+    required this.osservando,
+    required this.mezzi,
+    required this.esito,
+    required this.onPressed,
+  });
+
+  final bool osservando;
+  final int mezzi;
+  final bool esito;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final String testo;
+    if (osservando) {
+      testo = mezzi == 0
+          ? 'Ricerca dei mezzi…'
+          : '$mezzi ${mezzi == 1 ? "mezzo" : "mezzi"} sulla mappa';
+    } else if (esito) {
+      testo = 'Esito dei mezzi';
+    } else {
+      testo = 'Segui i mezzi';
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xCC2C2C2E)
+                    : const Color(0xE6FFFFFF),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppleColors.separator(context),
+                  width: 0.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (osservando)
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppleColors.systemBlue),
+                      ),
+                    )
+                  else
+                    Icon(
+                      esito
+                          ? CupertinoIcons.checkmark_alt_circle
+                          : CupertinoIcons.eye,
+                      size: 18,
+                      color: AppleColors.systemBlue,
+                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    testo,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppleColors.label(context),
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Intestazione extends StatelessWidget {
+  const _Intestazione(this.testo);
+
+  final String testo;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+    child: Text(
+      testo.toUpperCase(),
+      style: AppleTypography.sectionHeader(context),
+    ),
+  );
+}
+
+/// Tanti avvisi, raccolti in una voce che si apre.
+class _AvvisiRaccolti extends StatelessWidget {
+  const _AvvisiRaccolti({required this.count, required this.children});
+
+  final int count;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: AppGroupedCard(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.zero,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            leading: Icon(
+              CupertinoIcons.doc_on_doc,
+              size: 20,
+              color: AppleColors.systemBlue,
+            ),
+            title: Text(
+              '$count avvisi di GTT',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                color: AppleColors.label(context),
+              ),
+            ),
+            subtitle: Text(
+              'Testi originali',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppleColors.secondaryLabel(context),
+              ),
+            ),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            childrenPadding: const EdgeInsets.only(bottom: 12),
+            children: children,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La risposta, in cima: cosa non e' servito e dove salire invece.
+///
+/// Si legge sul percorso, non avviso per avviso: sulla 10N il 26/09 GTT
+/// aveva pubblicato sedici avvisi, uno per fermata, e per chi aspetta il
+/// bus erano una cosa sola — nove fermate chiuse di fila in una
+/// direzione, sei nell'altra.
+/// Gli esiti raggruppati per avviso, nell'ordine in cui arrivano.
+///
+/// Un avviso che riguarda tutte e due le direzioni viene analizzato due
+/// volte — ed e' giusto, le fermate saltate sono diverse per senso di
+/// marcia — ma mostrarlo come DUE schede significa ristampare per intero
+/// lo stesso testo di GTT. Sulla 68, tre avvisi diventavano sei schede.
+List<List<DeviationReport>> _perAvviso(List<DeviationReport> reports) {
+  final per = <String, List<DeviationReport>>{};
+  for (final r in reports) {
+    per.putIfAbsent(r.notice.id, () => []).add(r);
+  }
+  return per.values.toList(growable: false);
+}
+
+String _maiuscola(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+String _verso(RouteShape shape, TransitLine line) =>
+    DisplayNames.direction(shape.headsign, longName: line.longName);
+
+String _data(DateTime d) =>
+    '${d.day.toString().padLeft(2, "0")}/${d.month.toString().padLeft(2, "0")}';
+
+class _ReportCard extends StatelessWidget {
+  const _ReportCard({required this.reports, required this.status});
+
+  /// Lo stesso avviso, una volta per direzione interessata.
+  final List<DeviationReport> reports;
+  final LineStatus status;
+
+  DeviationReport get _primo => reports.first;
+
+  @override
+  Widget build(BuildContext context) {
+    final stato = _primo.notice.statoAl(status.checkedAt);
+    // Finito: resta il testo di GTT, ma le fermate che chiudeva non si
+    // elencano piu' come non servite.
+    final finito = stato == StatoPeriodo.finito;
+    // Le direzioni in cui l'avviso non tocca niente non hanno niente da
+    // dire, se in un'altra tocca qualcosa. Sulla 10N ogni avviso nomina
+    // una fermata di UNA direzione: l'analisi dell'altra diceva «GTT nomina
+    // la 422, che non risulta su questo percorso», e la scheda sembrava
+    // contraddirsi — verificata in verde, e sotto un dubbio.
+    final conEffetto = finito
+        ? const <DeviationReport>[]
+        : reports.where((r) => r.skippedStops.isNotEmpty).toList();
+    final rilevanti = conEffetto.isNotEmpty ? conEffetto : reports;
+    // Con piu' direzioni si mostra la piu' incerta: dire "verificata"
+    // quando una delle due non lo e' sarebbe una promessa piu' grande del
+    // dato.
+    final peggiore = rilevanti.reduce(
+      (a, b) => a.confidence.index >= b.confidence.index ? a : b,
+    );
+    final piuDirezioni = conEffetto.length > 1;
+
+    return AppGroupedCard(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (stato != StatoPeriodo.inCorso && stato != StatoPeriodo.sconosciuto)
+            _StrisciaQuando(
+              notice: _primo.notice,
+              now: status.checkedAt,
+              stato: stato,
+            ),
+
+          // 1. La risposta, per ogni direzione.
+          for (final r in conEffetto) ...[
+            if (piuDirezioni)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  'Verso ${_verso(r.shape, status.line)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppleColors.label(context),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+            _SkippedStops(stops: r.skippedStops),
+          ],
+          if (!finito &&
+              conEffetto.isEmpty &&
+              reports.any((r) => r.impact != null))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Text(
+                'Il percorso cambia, ma tutte le fermate restano servite.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppleColors.label(context),
+                ),
+              ),
+            ),
+
+          // 2. Il testo di GTT, UNA volta sola.
+          _OriginalText(report: _primo),
+
+          // 3. Quanto fidarsi, in fondo: e' un dettaglio della risposta,
+          // non la risposta. Prima stava in cima, in una fascia colorata,
+          // e la prima cosa che si leggeva era «Ricostruita e verificata».
+          // Di un avviso finito non c'e' piu' niente da verificare.
+          if (!finito) _Affidabilita(report: peggiore),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quando vale un avviso che non e' in corso adesso: «In vigore dal
+/// 05/10 · domani», «Solo il sabato, dalle 6:00 alle 15:00», «Terminato il
+/// 15/09». "Comincia fra 23 giorni": la data da sola fa fare il conto a
+/// mano.
+class _StrisciaQuando extends StatelessWidget {
+  const _StrisciaQuando({
+    required this.notice,
+    required this.now,
+    required this.stato,
+  });
+
+  final RawNotice notice;
+  final DateTime now;
+  final StatoPeriodo stato;
+
+  @override
+  Widget build(BuildContext context) {
+    final testo = quandoAvviso(notice, now);
+    if (testo.isEmpty) return const SizedBox.shrink();
+    final finito = stato == StatoPeriodo.finito;
+    final colore = finito
+        ? AppleColors.secondaryLabel(context)
+        : AppleColors.systemBlue;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colore.withValues(alpha: 0.08),
+        border: Border(
+          bottom: BorderSide(
+            color: AppleColors.separator(context),
+            width: 0.5,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            switch (stato) {
+              StatoPeriodo.finito => CupertinoIcons.clock,
+              StatoPeriodo.fuoriOrario => CupertinoIcons.time,
+              _ => CupertinoIcons.calendar,
+            },
+            size: 16,
+            color: colore,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              testo,
+              style: TextStyle(
+                color: colore,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Affidabilita extends StatelessWidget {
+  const _Affidabilita({required this.report});
+
+  final DeviationReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = AppleColors.secondaryLabel(context);
+    final (
+      Color colore,
+      IconData icon,
+      String label,
+    ) = switch (report.confidence) {
+      Confidence.confermata => (
+        AppleColors.systemGreen,
+        CupertinoIcons.checkmark_seal_fill,
+        'Verificato',
+      ),
+      Confidence.probabile => (
+        AppleColors.systemOrange,
+        CupertinoIcons.question_circle_fill,
+        'Da confermare',
+      ),
+      Confidence.soloTesto => (
+        secondary,
+        CupertinoIcons.doc_text,
+        'Solo il testo di GTT',
+      ),
+    };
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppleColors.secondarySystemGroupedBackground(context).withValues(alpha: 0.5),
+        border: Border(
+          top: BorderSide(color: AppleColors.separator(context), width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: colore),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: colore,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+                if (report.whyIncomplete != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      report.whyIncomplete!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: secondary,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkippedStops extends StatelessWidget {
+  const _SkippedStops({required this.stops});
+
+  final List<StopImpact> stops;
+
+  @override
+  Widget build(BuildContext context) {
+    final piccolo = TextStyle(
+      fontSize: 13,
+      color: AppleColors.secondaryLabel(context),
+      letterSpacing: -0.1,
+    );
+    final tutteInLineaDAria = stops
+        .expand((s) => s.alternatives)
+        .every((a) => a.walkingMeters == null);
+    final ciSonoAlternative = stops.any((s) => s.alternatives.isNotEmpty);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                CupertinoIcons.slash_circle,
+                size: 16,
+                color: AppleColors.systemRed,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                stops.length == 1
+                    ? '1 fermata non servita'
+                    : '${stops.length} fermate non servite',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppleColors.systemRed,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final s in stops) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Icon(
+                    CupertinoIcons.circle_fill,
+                    size: 7,
+                    color: AppleColors.systemRed,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: DisplayNames.stop(s.stop),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: AppleColors.label(context),
+                              ),
+                            ),
+                            // Il numero sul palo: serve a riconoscerla.
+                            if (s.stop.code != null)
+                              TextSpan(
+                                text: '  ${s.stop.code}',
+                                style: piccolo,
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (s.status == StopStatus.declaredSuspended)
+                        Text('sospesa da GTT', style: piccolo),
+                      for (final alt in s.alternatives)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.directions_walk,
+                                size: 14,
+                                color: AppleColors.secondaryLabel(context),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  // Il numero sul palo: due pali della
+                                  // stessa piazza hanno lo stesso nome, e
+                                  // «Largo Giachino Sud» aperta accanto a
+                                  // «Largo Giachino Sud» chiusa confonde.
+                                  '${DisplayNames.stop(alt.stop)}'
+                                  '${alt.stop.code == null ? "" : " ${alt.stop.code}"} · '
+                                  '${alt.bestKnownMeters.round()} m'
+                                  '${tutteInLineaDAria
+                                      ? ""
+                                      : alt.walkingMeters != null
+                                      ? " a piedi"
+                                      : " in linea d'aria"}'
+                                  '${alt.sameLine ? "" : " · altre linee"}',
+                                  style: piccolo,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (s.alternatives.isEmpty)
+                        Text(
+                          'nessuna fermata aperta entro 400 m',
+                          style: piccolo,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (ciSonoAlternative && tutteInLineaDAria)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('Distanze in linea d\'aria.', style: piccolo),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Il testo di GTT, richiudibile quando e' lungo.
+///
+/// Gli avvisi di GTT arrivano a venti righe — quello della 68 descrive
+/// due direzioni, la viabilita' di cantiere e la causa — e con quattro
+/// avvisi su una linea la schermata diventa un rotolo in cui il resto
+/// (le fermate saltate, la mappa) sparisce.
+///
+/// Si richiude solo quello lungo: un pulsante sotto un avviso di due
+/// righe e' rumore, e nasconde una cosa che si leggeva in un colpo
+/// d'occhio.
+class _OriginalText extends StatefulWidget {
+  const _OriginalText({required this.report});
+
+  final DeviationReport report;
+
+  /// Oltre questa lunghezza il testo si richiude. Tarata sui testi veri:
+  /// gli avvisi brevi di GTT ("Fermata 3447 Sabotino sospesa") stanno
+  /// sotto i 200 caratteri, quelli che descrivono un percorso li superano
+  /// sempre.
+  static const _sogliaCaratteri = 240;
+
+  @override
+  State<_OriginalText> createState() => _OriginalTextState();
+}
+
+class _OriginalTextState extends State<_OriginalText> {
+  bool _espanso = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final report = widget.report;
+    final n = report.notice;
+    final secondary = AppleColors.secondaryLabel(context);
+    final piccolo = TextStyle(
+      fontSize: 12,
+      color: secondary,
+      letterSpacing: -0.1,
+    );
+    // I testi del feed hanno doppi spazi a caso («non transita  alla
+    // fermata  422»): si tolgono, le parole restano quelle di GTT.
+    final corpo = n.text.replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
+    final lungo = corpo.length > _OriginalText._sogliaCaratteri;
+    final chiuso = lungo && !_espanso;
+    final motivo = DisplayNames.reason(n.reason);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(CupertinoIcons.doc_plaintext, size: 14, color: AppleColors.systemBlue),
+              const SizedBox(width: 6),
+              Text(
+                'Testo originale',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppleColors.systemBlue,
+                  letterSpacing: -0.1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (n.headline != null && n.headline!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                n.headline!,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppleColors.label(context),
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          // Chiuso si vedono quattro righe sfumate in fondo: si capisce
+          // che continua senza doverlo scrivere.
+          if (chiuso)
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (r) => LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.white,
+                  Colors.white,
+                  Colors.white.withValues(alpha: 0.06),
+                ],
+                stops: const [0, 0.62, 1],
+              ).createShader(r),
+              child: Text(
+                corpo,
+                maxLines: 4,
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: AppleColors.label(context),
+                ),
+              ),
+            )
+          else
+            Text(
+              corpo,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: AppleColors.label(context),
+              ),
+            ),
+          if (lungo)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                onPressed: () => setState(() => _espanso = !_espanso),
+                child: Text(
+                  chiuso ? 'Leggi tutto' : 'Mostra meno',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppleColors.systemBlue,
+                  ),
+                ),
+              ),
+            ),
+          // Quando GTT pubblica la stessa variazione in due posti se ne
+          // mostra una sola, ed e' giusto dire perche': chi confronta con
+          // il sito deve capire da dove vengono le date.
+          if (n.isMerged)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Pubblicato da GTT in due versioni: qui la più completa.',
+                style: piccolo,
+              ),
+            ),
+          // Il codice del feed («OTHER_CAUSE») si traduce, e «altra causa»
+          // non si mostra: una riga per dire che non si sa.
+          if (motivo != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Motivo: $motivo', style: piccolo),
+            ),
+          const SizedBox(height: 2),
+          if (n.endToShow case final fine?)
+            Text('Fino al ${_data(fine)}/${fine.year}', style: piccolo)
+          else
+            Text('Fine non indicata', style: piccolo),
+        ],
+      ),
+    );
+  }
+}
