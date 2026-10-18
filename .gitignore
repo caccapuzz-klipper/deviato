@@ -11,6 +11,13 @@ app/.flutter-plugins*
 app/ios/Flutter/ephemeral/
 app/.idea/
 app/android/local.properties
+test/build/
+test/.dart_tool/
+test/ios/Pods/
+test/.flutter-plugins*
+test/ios/Flutter/ephemeral/
+test/.idea/
+test/android/local.properties
 .DS_Store
 
 # Il job su GitHub: orari scaricati e sito generato, in locale
