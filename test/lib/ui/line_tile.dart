@@ -7,6 +7,7 @@ import '../core/pipeline/closure_summary.dart';
 import 'apple_theme.dart';
 import 'line_badge.dart';
 import 'theme.dart';
+import 'transit_theme.dart';
 
 /// Una riga di "Le mie linee": stato in una frase, e i comandi.
 ///
@@ -216,36 +217,49 @@ class LineTile extends StatelessWidget {
             );
     }
 
-    return ListTile(
-      // Una riga nuova per ogni modalita', invece di trasformare quella
-      // che c'e'. Finita l'osservazione il sottotitolo passava da assente a
-      // presente, e ListTile ne chiedeva la linea di base prima di averlo
-      // impaginato: «2 avvisi» finiva in alto a sinistra, sopra
-      // l'etichetta (visto sul simulatore il 26/09, e c'e' un test).
-      key: ValueKey(
-        watching
-            ? 'osservazione'
-            : checking || preparing
-            ? 'aggiornamento'
-            : 'esito',
-      ),
-      onTap: onTap,
-      leading: SizedBox(
-        width: 60,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: LineBadge(line: line),
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Material(
+        color: isDark ? TransitColors.surfaceDark1 : TransitColors.surfaceLight1,
+        borderRadius: BorderRadius.circular(TransitSizes.radiusCard),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(TransitSizes.radiusCard),
+            border: Border.all(
+              color: isDark ? const Color(0x22FFFFFF) : const Color(0x14000000),
+              width: 0.5,
+            ),
+          ),
+          child: ListTile(
+            key: ValueKey(
+              watching
+                  ? 'osservazione'
+                  : checking || preparing
+                  ? 'aggiornamento'
+                  : 'esito',
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            onTap: onTap,
+            leading: SizedBox(
+              width: 60,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: LineBadge(line: line),
+              ),
+            ),
+            title: titolo,
+            subtitle: sottotitolo,
+            trailing: Icon(
+              CupertinoIcons.chevron_forward,
+              size: 14,
+              color: isDark ? Colors.white54 : AppleColors.tertiaryLabel(context),
+            ),
+          ),
         ),
-      ),
-      // Il titolo e' lo STATO, non i capolinea. I due capolinea non ci
-      // stanno su una riga — si troncavano a meta' — e chi ha aggiunto
-      // la linea sa gia' dove va: quello che non sa e' se oggi devia.
-      title: titolo,
-      subtitle: sottotitolo,
-      trailing: Icon(
-        CupertinoIcons.chevron_forward,
-        size: 14,
-        color: AppleColors.tertiaryLabel(context),
       ),
     );
   }

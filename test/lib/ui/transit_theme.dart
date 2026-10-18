@@ -35,6 +35,11 @@ class TransitColors {
   static const royaleGold = Color(0xFFFFC107);        // Oro corona VIP
   static const royaleGlow = Color(0x596C3CE9);        // Bagliore
 
+  // Transit Pill / ETA & HUD Tokens
+  static const etaPillBg = Color(0xFF102A43);         // Deep Navy Pill Background
+  static const etaPillText = Color(0xFFFFFFFF);       // Pure White Text
+  static const hudPillBg = Color(0xD9010101);         // OLED Black 85% for floating HUD
+
   // Risoluzione dinamica superfici
   static Color background(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark ? darkBase : surfaceLight2;
@@ -501,3 +506,69 @@ class _TransitLiveWaveIconState extends State<TransitLiveWaveIcon>
     );
   }
 }
+
+/// Pill ETA per countdown arrivi (stile Transit Navy Pill).
+class TransitEtaPill extends StatelessWidget {
+  const TransitEtaPill({
+    required this.minutes,
+    this.isLive = false,
+    this.unit = 'min',
+    super.key,
+  });
+
+  final String minutes;
+  final bool isLive;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: TransitColors.etaPillBg,
+        borderRadius: BorderRadius.circular(TransitSizes.radiusPill),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 0.8,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isLive) ...[
+            const TransitLiveWaveIcon(size: 13, color: TransitColors.greenVibrant),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            minutes,
+            style: const TextStyle(
+              color: TransitColors.etaPillText,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          if (unit.isNotEmpty) ...[
+            const SizedBox(width: 3),
+            Text(
+              unit,
+              style: TextStyle(
+                color: TransitColors.etaPillText.withValues(alpha: 0.8),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

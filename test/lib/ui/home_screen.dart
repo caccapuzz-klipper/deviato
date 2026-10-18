@@ -1030,7 +1030,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                LineBadge(line: line, height: 28),
+                LineBadge(line: line, height: 36),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

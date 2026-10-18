@@ -7,6 +7,7 @@ import '../core/text/display_names.dart';
 import 'apple_theme.dart';
 import 'line_badge.dart';
 import 'theme.dart';
+import 'transit_theme.dart';
 
 /// Le fermate salvate di una linea, in una scheda sola.
 ///
@@ -254,14 +255,44 @@ class SavedStopRow extends StatelessWidget {
                 ),
               ),
               if (onOpenArrivals != null)
-                IconButton(
-                  icon: Icon(
-                    Icons.departure_board_outlined,
-                    color: AppleColors.systemBlue,
-                    size: 22,
+                Padding(
+                  padding: const EdgeInsets.only(left: 6, top: 2),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: TransitColors.etaPillBg,
+                      borderRadius: BorderRadius.circular(TransitSizes.radiusPill),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 0.5,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x22000000),
+                          blurRadius: 3,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 4),
+                        const TransitLiveWaveIcon(size: 13, color: TransitColors.greenVibrant),
+                        IconButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(
+                            Icons.departure_board_outlined,
+                            color: TransitColors.etaPillText,
+                            size: 18,
+                          ),
+                          tooltip: 'Arrivi in tempo reale',
+                          onPressed: onOpenArrivals,
+                        ),
+                      ],
+                    ),
                   ),
-                  tooltip: 'Arrivi in tempo reale',
-                  onPressed: onOpenArrivals,
                 ),
             ],
           ),

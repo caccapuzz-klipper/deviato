@@ -9,16 +9,23 @@ import 'transit_theme.dart';
 /// micro-icona del veicolo (14x14) e contrasto calcolato dinamicamente
 /// tra bianco ultra-puro (#FEFEFE) e nero OLED (#010101).
 class LineBadge extends StatelessWidget {
-  const LineBadge({required this.line, this.height = 36, super.key});
+  const LineBadge({
+    required this.line,
+    this.height = 36,
+    this.large = false,
+    super.key,
+  });
 
   final TransitLine line;
   final double height;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final effectiveHeight = large ? 56.0 : height;
     final ufficiale = _parse(line.color);
     final fondo = ufficiale ?? (isDark ? TransitColors.surfaceDark2 : theme.colorScheme.primaryContainer);
     final testo = ufficiale == null
@@ -38,12 +45,12 @@ class LineBadge extends StatelessWidget {
       label: '$mezzo ${line.shortName}',
       excludeSemantics: true,
       child: Container(
-        height: height,
-        constraints: BoxConstraints(minWidth: height * 1.35),
-        padding: const EdgeInsets.symmetric(horizontal: 7),
+        height: effectiveHeight,
+        constraints: BoxConstraints(minWidth: effectiveHeight * 1.3),
+        padding: EdgeInsets.symmetric(horizontal: large ? 12 : 7),
         decoration: BoxDecoration(
           color: fondo,
-          borderRadius: BorderRadius.circular(TransitSizes.radiusBadge),
+          borderRadius: BorderRadius.circular(large ? 12.0 : TransitSizes.radiusBadge),
           border: needsBorder
               ? Border.all(
                   color: const Color(0x33000000),

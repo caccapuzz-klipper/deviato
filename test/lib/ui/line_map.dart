@@ -995,13 +995,15 @@ class _LineMapState extends State<LineMap> {
               ),
               child: Center(
                 child: Container(
-                  width: isSelected ? 24 : 20,
-                  height: isSelected ? 24 : 20,
+                  width: isSelected ? 26 : 22,
+                  height: isSelected ? 26 : 22,
                   decoration: BoxDecoration(
-                    color: isOff
-                        ? const Color(0xFFFF5722)
-                        : const Color(0xFF00E676),
+                    color: Colors.white,
                     shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isOff ? const Color(0xFFFF3B30) : const Color(0xFF02B875),
+                      width: 2.0,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.35),
@@ -1013,7 +1015,7 @@ class _LineMapState extends State<LineMap> {
                   child: Icon(
                     Icons.directions_bus,
                     size: isSelected ? 15 : 12,
-                    color: Colors.black87,
+                    color: isOff ? const Color(0xFFFF3B30) : const Color(0xFF02B875),
                   ),
                 ),
               ),

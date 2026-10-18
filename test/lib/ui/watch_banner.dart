@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/models/transit.dart';
 import '../data/app_repository.dart';
 import 'line_screen.dart';
+import 'transit_theme.dart';
 
 /// La striscia che resta in cima mentre si guardano i mezzi.
 ///
@@ -129,55 +130,73 @@ class _Striscia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // I colori del tema e non un azzurro scritto a mano: in modalita'
-    // scura la striscia era una macchia chiara su fondo nero, e il blu su
-    // azzurro si fermava a 4,03:1. primaryContainer e il suo «on» sono
-    // accoppiati apposta per leggersi, in chiaro e in scuro.
-    final scheme = Theme.of(context).colorScheme;
-    final blu = scheme.onPrimaryContainer;
-    return Material(
-      color: scheme.primaryContainer,
-      child: SafeArea(
-        bottom: false,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 4, 6),
-            child: Row(
-              children: [
-                Icon(
-                  line.isTram ? Icons.tram : Icons.directions_bus,
-                  size: 18,
-                  color: blu,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    // Numero della linea, quanti mezzi, quanto manca: le
-                    // tre cose che uno vuole sapere senza aprire niente.
-                    '${line.shortName} · ${mezzi == 0 ? "in attesa di mezzi" : "$mezzi ${mezzi == 1 ? "mezzo" : "mezzi"}"} · $tempo',
-                    style: TextStyle(color: blu, fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                // Semantics e non Tooltip: la striscia vive nel `builder`
-                // di MaterialApp, quindi STA SOPRA il Navigator — e con
-                // lui sopra l'Overlay che i tooltip pretendono. Con
-                // `tooltip:` l'app si apriva sulla schermata rossa.
-                Semantics(
-                  button: true,
-                  label: 'Interrompi',
-                  child: IconButton(
-                    // La stessa icona del pulsante nella schermata della
-                    // linea: e' lo stesso gesto, e due simboli diversi
-                    // per la stessa azione si imparano due volte.
-                    icon: const Icon(Icons.stop_outlined),
-                    color: blu,
-                    onPressed: onStop,
-                  ),
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xEB010101) : const Color(0xF2102A43),
+              borderRadius: BorderRadius.circular(TransitSizes.radiusPill),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.18),
+                width: 0.8,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x3D000000),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
                 ),
               ],
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(TransitSizes.radiusPill),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                child: Row(
+                  children: [
+                    const TransitLiveWaveIcon(size: 15, color: TransitColors.greenVibrant),
+                    const SizedBox(width: 8),
+                    Icon(
+                      line.isTram ? Icons.tram : Icons.directions_bus,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${line.shortName} · ${mezzi == 0 ? "in attesa di mezzi" : "$mezzi ${mezzi == 1 ? "mezzo" : "mezzi"}"} · $tempo',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Semantics(
+                      button: true,
+                      label: 'Interrompi',
+                      child: IconButton(
+                        icon: const Icon(Icons.stop_circle_outlined),
+                        color: Colors.white70,
+                        iconSize: 22,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        onPressed: onStop,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
